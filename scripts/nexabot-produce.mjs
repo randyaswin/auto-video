@@ -126,12 +126,22 @@ const styleFor = (aspectRatio) =>
   'natural lighting, shallow depth of field, ' +
   'no text, no letters, no numbers, no captions, no logos, no watermark anywhere in frame'
 
-/** Local copy of a clip's image, generated now or pulled from the app's asset route. */
-async function stageImage(clip, index, key, aspect, style) {
+const DATA_DIR = join(homedir(), '.bang-story')
+
+/** The app's asset row for a clip, so an existing image can be reused instead of paid for again. */
+function assetOf(bundle, clipId, kind) {
+  return (bundle.assets ?? []).find((a) => a.clipId === clipId && a.kind === kind && a.localPath) ?? null
+}
+
+/** Local copy of a clip's image: already imported, pulled from the app's asset route, or generated. */
+async function stageImage(bundle, clip, index, key, aspect, style) {
   const jpg = join(RUN, `${index}`.padStart(2, '0') + '.jpg')
   if (existsSync(jpg)) return jpg
-  if (clip.image) {
-    const res = await fetch(`${BASE}${clip.image}`)
+  const existing = assetOf(bundle, clip.id, 'image')
+  if (existing) {
+    const local = join(DATA_DIR, existing.localPath)
+    if (existsSync(local)) return local
+    const res = await fetch(`${BASE}/studio/asset/${existing.localPath}`)
     if (res.ok) {
       await writeFile(jpg, Buffer.from(await res.arrayBuffer()))
       return jpg
@@ -175,15 +185,15 @@ async function main() {
   for (const [i, clip] of bundle.clips.entries()) {
     console.log(`  -- klip ${i}: ${(clip.title || clip.narration || '').slice(0, 50)}`)
     try {
-      if (!clip.image) {
-        const img = await stageImage(clip, i, key, ASPECT, STYLE)
+      if (!clip.imageAssetId) {
+        const img = await stageImage(bundle, clip, i, key, ASPECT, STYLE)
         await api('assets:importClip', [PROJECT, clip.id, 'image', img])
         console.log('     gambar ok')
       } else console.log('     gambar sudah ada, lewati')
 
-      if (WANT_VIDEO && !clip.video) {
+      if (WANT_VIDEO && !clip.videoAssetId) {
         try {
-          const jpg = await stageImage(clip, i, key, ASPECT, STYLE)
+          const jpg = await stageImage(bundle, clip, i, key, ASPECT, STYLE)
           const vid = await nexaJob(
             {
               mode: 'sfv',
@@ -202,7 +212,7 @@ async function main() {
         }
       }
 
-      if (!clip.voice && clip.narration) {
+      if (!clip.audioAssetId && clip.narration) {
         const wav = await nexaJob(
           { mode: 'tts', prompt: clip.narration, voice: VOICE },
           join(RUN, `${`${i}`.padStart(2, '0')}-tts.wav`),
