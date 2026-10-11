@@ -17,7 +17,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const require = createRequire(import.meta.url)
-const BASE = process.env.BANG_STORY_URL ?? 'http://127.0.0.1:4627'
+const BASE = process.env.BANG_STORY_URL ?? 'http://100.115.185.3:4627' // laptop tailnet IP; the server is bound to it, not to loopback
 const NEXA = 'https://nexabot.id/api/v1'
 const STAGE = join(tmpdir(), 'nexabot-produce')
 
