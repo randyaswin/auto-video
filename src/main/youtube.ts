@@ -97,18 +97,15 @@ function put(url: string, headers: Record<string, string>, filePath?: string): P
  */
 async function insertCaptionsRaw(bearer: string, videoId: string, srtPath: string): Promise<{ ok: boolean; detail: string }> {
   const file = readFileSync(srtPath)
-  const boundary = '----------bangstory' + Date.now().toString(36)
+  // Shape verified against the API: a boundary without leading dashes, a bare application/json part
+  // and the file as application/octet-stream. Per-part Content-Length and Content-Disposition both make
+  // this endpoint answer "Malformed multipart body".
+  const boundary = 'bangstory' + Date.now().toString(36)
   const meta = JSON.stringify({ snippet: { videoId, name: 'English', language: 'en', isDraft: false } })
-  // multipart/related: every part declares its own content type and length, the file rides as octet-stream.
   const body = Buffer.concat([
-    Buffer.from(
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: ${Buffer.byteLength(meta)}\r\n\r\n`
-    ),
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json\r\n\r\n`),
     Buffer.from(meta),
-    Buffer.from(
-      `\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n` +
-        `Content-Disposition: attachment; filename="captions.srt"\r\nContent-Length: ${file.length}\r\n\r\n`
-    ),
+    Buffer.from(`\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`),
     file,
     Buffer.from(`\r\n--${boundary}--\r\n`)
   ])
