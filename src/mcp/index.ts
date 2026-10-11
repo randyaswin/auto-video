@@ -6,6 +6,7 @@ import { bootCore } from '../main/bootstrap'
 import { getDb } from '../main/db'
 import { seedDemo } from '../main/demo'
 import { dispatch, importLocalAsset } from '../main/ipc'
+import { importClipMedia } from '../main/media'
 import { assetAbsPath } from '../main/paths'
 import { getAsset, getBundle, getJob, listProjects } from '../main/repo'
 import type { Asset, Job, ProjectBundle } from '../shared/types'
@@ -292,6 +293,21 @@ server.registerTool(
     }
   },
   guard(async (a) => importLocalAsset(a.projectId, a.kind, a.path))
+)
+
+server.registerTool(
+  'media_import',
+  {
+    description:
+      'Attach an image, video or voice file the server can read to one clip, as if the app had generated it. Use this to feed media from NexaBot (or any other generator) into a project.',
+    inputSchema: {
+      projectId: z.string().min(1),
+      clipId: z.string().min(1),
+      kind: z.enum(['image', 'video', 'audio']),
+      path: z.string().min(1).describe('Absolute path of the media file on the laptop')
+    }
+  },
+  guard(async (a) => importClipMedia(a.projectId, a.clipId, a.kind, a.path))
 )
 
 server.registerTool(
