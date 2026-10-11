@@ -95,7 +95,7 @@ function put(url: string, headers: Record<string, string>, filePath?: string): P
  * Attaches an .srt as a caption track so viewers can switch it on and off on YouTube. Multipart upload:
  * one JSON part describing the caption, one part carrying the file.
  */
-async function insertCaptions(bearer: string, videoId: string, srtPath: string): Promise<void> {
+async function insertCaptionsRaw(bearer: string, videoId: string, srtPath: string): Promise<{ ok: boolean; detail: string }> {
   const file = readFileSync(srtPath)
   const boundary = 'bangstory' + Date.now().toString(36)
   const meta = JSON.stringify({ snippet: { videoId, name: 'English', language: 'en', isDraft: false } })
@@ -127,10 +127,24 @@ async function insertCaptions(bearer: string, videoId: string, srtPath: string):
     req.on('error', reject)
     req.end(body)
   })
-  if (res.status !== 200 && res.status !== 201) {
-    // Captions are a bonus: the video itself is already up, so report instead of failing the upload.
-    console.warn('Caption track skipped:', res.status, res.body.slice(0, 200))
-  }
+  return res.status === 200 || res.status === 201
+    ? { ok: true, detail: `Track caption terpasang (HTTP ${res.status})` }
+    : { ok: false, detail: `HTTP ${res.status}: ${res.body.slice(0, 250)}` }
+}
+
+async function insertCaptions(bearer: string, videoId: string, srtPath: string): Promise<void> {
+  const r = await insertCaptionsRaw(bearer, videoId, srtPath)
+  // Captions are a bonus: the video itself is already up, so report instead of failing the upload.
+  if (!r.ok) console.warn('Caption track skipped:', r.detail)
+}
+
+/** Attaches an .srt to an already uploaded video as a toggleable CC track. */
+export async function youtubeAddSubtitles(videoId: string, srtPath: string): Promise<{ ok: boolean; detail: string }> {
+  const tokens = loadTokens()
+  const bearer = await accessToken(tokens)
+  if (!existsSync(srtPath)) return { ok: false, detail: `File subtitle tidak ada: ${srtPath}` }
+  const before = await insertCaptionsRaw(bearer, videoId, srtPath)
+  return before
 }
 
 export async function youtubeUpload(input: YoutubeUploadInput): Promise<YoutubeUploadResult> {

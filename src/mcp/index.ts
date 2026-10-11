@@ -7,7 +7,7 @@ import { getDb } from '../main/db'
 import { seedDemo } from '../main/demo'
 import { dispatch, importLocalAsset } from '../main/ipc'
 import { importClipMedia } from '../main/media'
-import { youtubeUpload, saveOauthClient } from '../main/youtube'
+import { youtubeUpload, youtubeAddSubtitles, saveOauthClient } from '../main/youtube'
 import { assetAbsPath } from '../main/paths'
 import { getAsset, getBundle, getJob, listProjects } from '../main/repo'
 import type { Asset, Job, ProjectBundle } from '../shared/types'
@@ -343,6 +343,19 @@ server.registerTool(
     }
   },
   guard(async (a) => youtubeUpload(a))
+)
+
+server.registerTool(
+  'youtube_add_subtitles',
+  {
+    description:
+      'Attach an .srt caption track to an already uploaded video so viewers can toggle it as YouTube CC.',
+    inputSchema: {
+      videoId: z.string().min(1).describe('YouTube video id, e.g. -f5zl-hd70I'),
+      subtitlesPath: z.string().min(1).describe('Absolute path of the .srt on the laptop')
+    }
+  },
+  guard(async (a) => youtubeAddSubtitles(a.videoId, a.subtitlesPath))
 )
 
 server.registerTool(
