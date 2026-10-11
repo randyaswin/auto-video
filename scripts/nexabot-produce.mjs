@@ -107,9 +107,9 @@ async function nexaJob(payload, out, key) {
 }
 
 /** The API burns a white star bottom-right; cropping it is cleaner than patching pixels. */
-function cropWatermark(src) {
+function cropWatermark(src, scale) {
   const out = src.replace(/\.mp4$/, '-crop.mp4')
-  const r = spawnSync(require('ffmpeg-static'), ['-y', '-i', src, '-vf', 'crop=iw*0.8435:ih*0.84375:iw*0.0778:0,scale=1080:1920:flags=lanczos', '-c:a', 'copy', out], {
+  const r = spawnSync(require('ffmpeg-static'), ['-y', '-i', src, '-vf', `crop=iw*0.8435:ih*0.84375:iw*0.0778:0,scale=${scale}:flags=lanczos`, '-c:a', 'copy', out], {
     encoding: 'utf8'
   })
   if (r.status !== 0) {
@@ -119,12 +119,14 @@ function cropWatermark(src) {
   return out
 }
 
-const STYLE =
-  'cinematic vertical 9:16 frame, photorealistic, natural lighting, shallow depth of field, ' +
+/** Framing clauses follow the project's aspect ratio: 9:16 Shorts vs 16:9 long-form. */
+const styleFor = (aspectRatio) =>
+  `cinematic ${aspectRatio === '16:9' ? 'widescreen 16:9' : 'vertical 9:16'} frame, photorealistic, ` +
+  'natural lighting, shallow depth of field, ' +
   'no text, no letters, no numbers, no captions, no logos, no watermark anywhere in frame'
 
 /** Local copy of a clip's image, generated now or pulled from the app's asset route. */
-async function stageImage(clip, index, key) {
+async function stageImage(clip, index, key, aspect, style) {
   const jpg = join(RUN, `${index}`.padStart(2, '0') + '.jpg')
   if (existsSync(jpg)) return jpg
   if (clip.image) {
@@ -134,7 +136,7 @@ async function stageImage(clip, index, key) {
       return jpg
     }
   }
-  return nexaJob({ mode: 'img', prompt: `${clip.visualPrompt}. ${STYLE}`, aspect: 5 }, jpg, key)
+  return nexaJob({ mode: 'img', prompt: `${clip.visualPrompt}. ${style}`, aspect }, jpg, key)
 }
 
 async function main() {
@@ -149,31 +151,36 @@ async function main() {
   }
   console.log(`      ${bundle.clips.length} klip · bahasa ${bundle.project.language} · ${bundle.project.durationSec}s`)
 
-  console.log(`[2/4] Media NexaBot (gambar${WANT_VIDEO ? ' + video' : ''} + suara)`)
+  const AR = bundle.project.aspectRatio ?? '9:16'
+  const ASPECT = AR === '16:9' ? 2 : 5
+  const SCALE = AR === '16:9' ? '1920:1080' : '1080:1920'
+  const RATIO = AR === '16:9' ? 1 : 2 // NexaBot: 1 landscape, 2 portrait
+  const STYLE = styleFor(AR)
+  console.log(`[2/4] Media NexaBot (gambar${WANT_VIDEO ? ' + video' : ''} + suara, ${AR})`)
   for (const [i, clip] of bundle.clips.entries()) {
     console.log(`  -- klip ${i}: ${(clip.title || clip.narration || '').slice(0, 50)}`)
     try {
       if (!clip.image) {
-        const img = await stageImage(clip, i, key)
+        const img = await stageImage(clip, i, key, ASPECT, STYLE)
         await api('assets:importClip', [PROJECT, clip.id, 'image', img])
         console.log('     gambar ok')
       } else console.log('     gambar sudah ada, lewati')
 
       if (WANT_VIDEO && !clip.video) {
         try {
-          const jpg = await stageImage(clip, i, key)
+          const jpg = await stageImage(clip, i, key, ASPECT, STYLE)
           const vid = await nexaJob(
             {
               mode: 'sfv',
               prompt: `${clip.videoPrompt || clip.visualPrompt}. Slow subtle camera movement, smooth continuous motion, ${STYLE}`,
-              ratio: 2,
+              ratio: RATIO,
               resolution: 720,
               media: [`data:image/jpeg;base64,${(await readFile(jpg)).toString('base64')}`]
             },
             join(RUN, `${`${i}`.padStart(2, '0')}.mp4`),
             key
           )
-          await api('assets:importClip', [PROJECT, clip.id, 'video', cropWatermark(vid)])
+          await api('assets:importClip', [PROJECT, clip.id, 'video', cropWatermark(vid, SCALE)])
           console.log('     video ok')
         } catch (e) {
           console.warn(`     video gagal (${e.message}) — klip tetap pakai gambar + gerak kamera`)
