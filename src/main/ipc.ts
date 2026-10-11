@@ -62,6 +62,7 @@ import * as gemini from './services/gemini'
 import * as hf from './services/higgsfield'
 import * as llm from './services/llm'
 import { generateScript, generateVisuals, generateMusicPrompt } from './story'
+import { importClipMedia } from './media'
 
 
 type Handler = (...args: any[]) => unknown
@@ -156,6 +157,11 @@ function registerHandlers(): void {
     emit.asset(fresh)
     return fresh
   })
+  // Media made by any generator outside the app (NexaBot, a phone) lands on a clip through here.
+  handle('assets:importClip', (projectId: string, clipId: string, kind: 'image' | 'video' | 'audio', src: string) =>
+    importClipMedia(projectId, clipId, kind, src)
+  )
+
   handle('assets:pickMusic', async (projectId: string) => {
     const src = await pickPath({ title: 'Pilih musik latar', extensions: ['mp3', 'wav', 'm4a', 'ogg'] })
     if (!src) return null
