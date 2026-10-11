@@ -35,7 +35,8 @@ if (!PROJECT) {
 const WANT_VIDEO = !flag('no-video')
 const VOICE = opt('voice', 'Achernar')
 
-mkdirSync(STAGE, { recursive: true })
+const RUN = join(STAGE, PROJECT) // staging per project — one project's image must never feed another
+mkdirSync(RUN, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function nexaKey() {
@@ -124,7 +125,7 @@ const STYLE =
 
 /** Local copy of a clip's image, generated now or pulled from the app's asset route. */
 async function stageImage(clip, index, key) {
-  const jpg = join(STAGE, `${index}`.padStart(2, '0') + '.jpg')
+  const jpg = join(RUN, `${index}`.padStart(2, '0') + '.jpg')
   if (existsSync(jpg)) return jpg
   if (clip.image) {
     const res = await fetch(`${BASE}${clip.image}`)
@@ -169,7 +170,7 @@ async function main() {
               resolution: 720,
               media: [`data:image/jpeg;base64,${(await readFile(jpg)).toString('base64')}`]
             },
-            join(STAGE, `${`${i}`.padStart(2, '0')}.mp4`),
+            join(RUN, `${`${i}`.padStart(2, '0')}.mp4`),
             key
           )
           await api('assets:importClip', [PROJECT, clip.id, 'video', cropWatermark(vid)])
@@ -182,7 +183,7 @@ async function main() {
       if (!clip.voice && clip.narration) {
         const wav = await nexaJob(
           { mode: 'tts', prompt: clip.narration, voice: VOICE },
-          join(STAGE, `${`${i}`.padStart(2, '0')}-tts.wav`),
+          join(RUN, `${`${i}`.padStart(2, '0')}-tts.wav`),
           key
         )
         await api('assets:importClip', [PROJECT, clip.id, 'audio', wav])
