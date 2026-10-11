@@ -262,7 +262,9 @@ export interface CaptionChunk {
  * Longer words and punctuation pauses get more time.
  */
 export function estimateWordTimings(text: string, durationSec: number): WordTiming[] {
-  const tokens = text.split(/\s+/).filter(Boolean)
+  // Voice tags (<short pause>, <whispers>) steer the TTS only; if they reach the caption they show up
+  // as literal text on screen. Anything starting with "<" is a tag, whole or cut off mid-word.
+  const tokens = text.split(/\s+/).filter(Boolean).filter((w) => !w.startsWith('<'))
   if (tokens.length === 0 || durationSec <= 0) return []
   const lead = Math.min(0.15, durationSec * 0.03)
   const tail = Math.min(0.25, durationSec * 0.05)

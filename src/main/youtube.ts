@@ -17,6 +17,8 @@ type Tokens = { clientId: string; clientSecret: string; refreshToken: string }
 
 export type YoutubeUploadInput = {
   path: string
+  /** Optional .srt to attach as a toggleable caption track — YouTube CC instead of burned-in text. */
+  subtitlesPath?: string
   title: string
   description?: string
   tags?: string[]
@@ -89,6 +91,48 @@ function put(url: string, headers: Record<string, string>, filePath?: string): P
  * Resumable upload: ask YouTube where to send the bytes, then stream the file straight from disk so a
  * 10-minute MP4 never sits in memory.
  */
+/**
+ * Attaches an .srt as a caption track so viewers can switch it on and off on YouTube. Multipart upload:
+ * one JSON part describing the caption, one part carrying the file.
+ */
+async function insertCaptions(bearer: string, videoId: string, srtPath: string): Promise<void> {
+  const file = readFileSync(srtPath)
+  const boundary = 'bangstory' + Date.now().toString(36)
+  const meta = JSON.stringify({ snippet: { videoId, name: 'English', language: 'en', isDraft: false } })
+  const body = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
+        `--${boundary}\r\nContent-Type: application/x-subrip\r\nContent-Disposition: attachment; filename="captions.srt"\r\n\r\n`
+    ),
+    file,
+    Buffer.from(`\r\n--${boundary}--\r\n`)
+  ])
+
+  const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const url = new URL('https://www.googleapis.com/upload/youtube/v3/captions?uploadType=multipart&part=snippet')
+    const req = httpsRequest(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${bearer}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+        'Content-Length': String(body.length),
+        timeout: 120_000
+      } as any,
+      timeout: 120_000
+    }, (r) => {
+      let raw = ''
+      r.on('data', (c) => { raw += c })
+      r.on('end', () => resolve({ status: r.statusCode ?? 0, body: raw }))
+    })
+    req.on('error', reject)
+    req.end(body)
+  })
+  if (res.status !== 200 && res.status !== 201) {
+    // Captions are a bonus: the video itself is already up, so report instead of failing the upload.
+    console.warn('Caption track skipped:', res.status, res.body.slice(0, 200))
+  }
+}
+
 export async function youtubeUpload(input: YoutubeUploadInput): Promise<YoutubeUploadResult> {
   if (!existsSync(input.path)) throw new Error(`File tidak ada: ${input.path}`)
   const size = statSync(input.path).size
@@ -153,6 +197,10 @@ export async function youtubeUpload(input: YoutubeUploadInput): Promise<YoutubeU
     id = m?.[1] ?? ''
   }
   if (!id) throw new Error('Upload selesai tetapi YouTube tidak mengembalikan ID video.')
+  if (input.subtitlesPath) {
+    if (!existsSync(input.subtitlesPath)) console.warn('File subtitle tidak ada:', input.subtitlesPath)
+    else await insertCaptions(bearer, id, input.subtitlesPath)
+  }
   return { id, url: `https://youtu.be/${id}`, privacy: input.privacy ?? 'private' }
 }
 

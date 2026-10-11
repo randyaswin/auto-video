@@ -225,8 +225,9 @@ async function main() {
       fileName: opt('name', `short-${Date.now()}`),
       resolution: 1080,
       fps: 30,
-      burnCaptions: true,
-      writeSrt: false,
+      // No burned-in captions: viewers switch YouTube's own CC track on and off instead.
+      burnCaptions: false,
+      writeSrt: true,
       normalizeAudio: true,
       duckMusic: true,
       folder

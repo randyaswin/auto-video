@@ -331,6 +331,10 @@ server.registerTool(
       'Upload a finished MP4 to YouTube (resumable, streamed from disk). Needs the refresh token from scripts/youtube-auth.mjs. Default privacy is private so nothing goes public by accident.',
     inputSchema: {
       path: z.string().min(1).describe('Absolute path of the MP4 on the laptop'),
+      subtitlesPath: z
+        .string()
+        .optional()
+        .describe('Optional .srt written by the exporter (writeSrt) — uploaded as a toggleable CC track'),
       title: z.string().min(1).max(100),
       description: z.string().max(4800).optional(),
       tags: z.array(z.string()).max(30).optional(),
