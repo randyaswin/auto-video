@@ -5,7 +5,7 @@
  * it and speaks the voice-over, every file is imported onto its clip, and the project is exported.
  *
  *   node scripts/nexabot-produce.mjs --project <id> [--no-video] [--voice Achernar] [--name my-short]
- *            [--scenes N] [--rebuild-script]
+ *            [--scenes N] [--rebuild-script] [--publish] [--publish-only] [--privacy private|unlisted|public]
  *
  * Env: BANG_STORY_URL (default http://127.0.0.1:4627), NEXABOT_API_KEY or ~/.hermes/nexabot.env.
  * Run it where the project lives (the laptop): imported files must be readable by the app.
@@ -217,8 +217,17 @@ async function main() {
     }
   }
 
-  console.log('[3/4] Ekspor MP4')
   const folder = await api('export:defaultFolder')
+  if (flag('publish-only')) {
+    // The export may already be running (or done) inside the server — do not render the same video twice.
+    const candidate = join(folder, `${opt('name', `short-${Date.now()}`)}.mp4`)
+    if (!existsSync(candidate)) throw new Error(`--publish-only tapi file tidak ada: ${candidate}`)
+    console.log('[3/4] Ekspor dilewati (pakai file yang ada)')
+    await publish(candidate)
+    return
+  }
+
+  console.log('[3/4] Ekspor MP4')
   const job = await api('export:start', [
     PROJECT,
     {
@@ -248,21 +257,26 @@ async function main() {
     if (Date.now() > deadline) throw new Error('Ekspor melebihi 20 menit')
   }
 
-  if (flag('publish')) {
-    if (!exported) throw new Error('Ekspor tidak mengembalikan path file, tidak bisa diunggah.')
-    console.log('[5/5] Unggah ke YouTube')
-    const meta = buildMetadata(bundle, opt('title'), opt('name'))
-    const srt = exported.replace(/\.mp4$/i, '.srt')
-    const up = await api('youtube:upload', [{
-      path: exported,
-      title: meta.title,
-      description: meta.description,
-      tags: meta.tags,
-      privacy: opt('privacy', 'private'),
-      ...(existsSync(srt) ? { subtitlesPath: srt } : {})
-    }])
-    console.log(`[5/5] Terunggah: ${up.url} (${up.privacy})`)
-  }
+  if (flag('publish')) await publish(exported)
+}
+
+/** Title, description, tags and the .srt straight onto YouTube. */
+async function publish(filePath) {
+  if (!filePath) throw new Error('Ekspor tidak mengembalikan path file, tidak bisa diunggah.')
+  console.log('[5/5] Unggah ke YouTube')
+  const bundle = await api('projects:get', [PROJECT])
+  const meta = buildMetadata(bundle, opt('title'), opt('name'))
+  const srt = filePath.replace(/\.mp4$/i, '.srt')
+  const up = await api('youtube:upload', [{
+    path: filePath,
+    title: meta.title,
+    description: meta.description,
+    tags: meta.tags,
+    privacy: opt('privacy', 'private'),
+    ...(existsSync(srt) ? { subtitlesPath: srt } : {})
+  }])
+  console.log(`[5/5] Terunggah: ${up.url} (${up.privacy})`)
+  return up
 }
 
 const STOP = new Set([
