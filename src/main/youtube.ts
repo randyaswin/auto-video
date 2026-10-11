@@ -11,7 +11,6 @@ import { request as httpsRequest } from 'node:https'
 
 const TOKENS_PATH = join(homedir(), '.bang-story', 'youtube-tokens.json')
 const OAUTH = 'https://oauth2.googleapis.com/token'
-const SCOPES = 'https://www.googleapis.com/auth/youtube.upload'
 
 type Tokens = { clientId: string; clientSecret: string; refreshToken: string }
 
@@ -60,12 +59,13 @@ function postForm(url: string, fields: Record<string, string>): Promise<{ status
 }
 
 async function accessToken(t: Tokens): Promise<string> {
+  // No scope here on purpose: asking for narrower or wider scopes than the grant yields invalid_scope,
+  // and Google falls back to the scopes the user actually approved.
   const { status, body } = await postForm(OAUTH, {
     client_id: t.clientId,
     client_secret: t.clientSecret,
     refresh_token: t.refreshToken,
-    grant_type: 'refresh_token',
-    scope: SCOPES
+    grant_type: 'refresh_token'
   })
   if (status !== 200 || !body?.access_token) {
     throw new Error(`Gagal memperbarui akses YouTube: ${body?.error ?? status} ${body?.error_description ?? ''}`.slice(0, 300))
