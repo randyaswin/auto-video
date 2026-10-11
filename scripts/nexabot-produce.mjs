@@ -99,7 +99,7 @@ async function nexaJob(payload, out, key) {
     if (Date.now() - started > 15 * 60_000) throw new Error(`NexaBot job ${submitted.jobId} melebihi 15 menit`)
     if (!['queued', 'processing', 'pending', undefined].includes(state)) throw new Error(`NexaBot status tak dikenal: ${state}`)
   }
-  const dl = await nexaFetch(`/jobs/${body.job_id}/download`, {}, key)
+  const dl = await nexaFetch(`/jobs/${submitted.jobId}/download`, {}, key)
   if (!dl.ok) throw new Error(`Unduhan NexaBot gagal (HTTP ${dl.status})`)
   await writeFile(out, Buffer.from(await dl.arrayBuffer()))
   return out
