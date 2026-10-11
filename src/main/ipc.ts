@@ -62,7 +62,7 @@ import * as gemini from './services/gemini'
 import * as hf from './services/higgsfield'
 import * as llm from './services/llm'
 import { generateScript, generateVisuals, generateMusicPrompt } from './story'
-import { importClipMedia } from './media'
+import { importClipMedia, recropProjectImages } from './media'
 import { youtubeUpload } from './youtube'
 
 
@@ -165,6 +165,8 @@ function registerHandlers(): void {
   )
 
   // Media made by any generator outside the app (NexaBot, a phone) lands on a clip through here.
+  handle('assets:recropImages', (projectId: string) => recropProjectImages(projectId))
+
   handle('assets:importClip', (projectId: string, clipId: string, kind: 'image' | 'video' | 'audio', src: string) =>
     importClipMedia(projectId, clipId, kind, src)
   )

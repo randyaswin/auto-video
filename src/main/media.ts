@@ -1,6 +1,8 @@
+import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { copyFileSync, mkdirSync } from 'node:fs'
-import { basename, dirname, extname } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs'
+import { basename, dirname, extname, join } from 'node:path'
+import ffmpegStatic from 'ffmpeg-static'
 import { estimateWordTimings } from '@shared/captions'
 import type { Asset, CameraPresetId } from '@shared/types'
 import { emit } from './events'
@@ -9,6 +11,35 @@ import { getClip, getProject, insertAsset, patchClip } from './repo'
 import { probeDurationMs, probeSize } from './services/audio'
 
 export type ClipMediaKind = 'image' | 'video' | 'audio'
+
+/**
+ * NexaBot burns its star bottom-right on stills too, and stills imported before the crop in
+ * `importClipMedia`'s path existed still carry it. This pass cuts it out in place: the untouched file
+ * becomes `<name>.orig`, which doubles as the marker that keeps a second run from cropping twice.
+ */
+export function recropProjectImages(projectId: string): number {
+  if (!ffmpegStatic) return 0
+  const dir = assetAbsPath(projectId, 'images')
+  if (!existsSync(dir)) return 0
+  let n = 0
+  for (const name of readdirSync(dir)) {
+    if (!/\.(jpe?g|png|webp)$/i.test(name)) continue
+    const abs = join(dir, name)
+    const kept = `${abs}.orig`
+    if (existsSync(kept)) continue
+    const out = abs.replace(/\.[a-z0-9]+$/i, '-crop.jpg')
+    const r = spawnSync(ffmpegStatic, [
+      '-y', '-i', abs,
+      '-vf', 'crop=iw*0.8435:ih*0.84375:iw*0.0778:0,scale=iw/0.8435:ih/0.84375:flags=lanczos',
+      '-q:v', '2', out
+    ], { encoding: 'utf8' })
+    if (r.status !== 0 || !existsSync(out)) continue
+    renameSync(abs, kept)
+    renameSync(out, abs)
+    n++
+  }
+  return n
+}
 
 const DIRS: Record<ClipMediaKind, string> = { image: 'images', video: 'videos', audio: 'audio' }
 const GLIDE: CameraPresetId[] = ['zoomin', 'panright', 'zoomout', 'panleft', 'kenburns']

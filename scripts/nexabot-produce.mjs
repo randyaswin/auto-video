@@ -12,7 +12,7 @@
  * Run it where the project lives (the laptop): imported files must be readable by the app.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
@@ -143,25 +143,6 @@ const styleFor = (aspectRatio) =>
   'no text, no letters, no numbers, no captions, no logos, no watermark anywhere in frame'
 
 const DATA_DIR = join(homedir(), '.bang-story')
-
-/** One-time: cut the star out of images that were imported before the crop existed; the untouched
- * original moves to `<file>.orig`, which doubles as a marker so a second run never crops twice. */
-function recropImages(bundle) {
-  let n = 0
-  for (const asset of bundle.assets ?? []) {
-    if (asset.kind !== 'image' || !asset.localPath || !asset.clipId) continue
-    const abs = join(DATA_DIR, asset.localPath)
-    const kept = `${abs}.orig`
-    if (!existsSync(abs) || existsSync(kept)) continue
-    const cropped = cropWatermarkStill(abs)
-    if (cropped === abs) continue
-    renameSync(abs, kept)
-    renameSync(cropped, abs)
-    n++
-  }
-  return n
-}
-
 const GLIDE = ['zoomin', 'panright', 'zoomout', 'panleft', 'kenburns']
 
 /**
@@ -300,7 +281,7 @@ async function main() {
 
   const refreshed = await api('projects:get', [PROJECT])
   if (flag('recrop')) {
-    const n = recropImages(refreshed)
+    const n = await api('assets:recropImages', [PROJECT])
     if (n) console.log(`  ${n} gambar dibersihkan dari watermark`)
   }
   const smoothed = await smoothStillCameras(refreshed)

@@ -71,6 +71,10 @@ export interface StudioApi {
     pickMusic(projectId: string): Promise<Asset | null>
     /** A logo or watermark image for an overlay. */
     pickImage(projectId: string): Promise<Asset | null>
+    /** Puts media made outside the app (NexaBot) onto one clip, like a generation job would. */
+    importClip(projectId: string, clipId: string, kind: 'image' | 'video' | 'audio', src: string): Promise<Asset>
+    /** Cuts the provider's watermark out of stills imported before the crop existed. Returns how many. */
+    recropImages(projectId: string): Promise<number>
   }
   settings: {
     get(): Promise<AppSettings>
