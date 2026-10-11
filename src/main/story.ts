@@ -54,11 +54,12 @@ interface ScriptPlan {
 }
 
 /** Writes the scene-by-scene script (story and voice-over) that the user reviews before any visuals exist. */
-export async function generateScript(projectId: string): Promise<ProjectBundle> {
+export async function generateScript(projectId: string, sceneCount?: number): Promise<ProjectBundle> {
   const project = getProject(projectId)
   if (!project.synopsis.trim()) throw new Error('Tulis ide cerita atau sinopsis dulu.')
   const lang = languageOf(project.language)
-  const count = clipCountFor(project.durationSec)
+  // The caller may know better than the curve: long-form pieces want chapter counts, not 6-second slices.
+  const count = sceneCount && sceneCount > 0 ? Math.round(sceneCount) : clipCountFor(project.durationSec)
 
   const system = [
     'You are a scriptwriter for faceless YouTube storytelling and explainer videos.',

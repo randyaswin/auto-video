@@ -115,7 +115,7 @@ function registerHandlers(): void {
   handle('projects:remove', (id: string) => removeProject(id))
   handle('projects:duplicate', (id: string) => duplicateProject(id))
 
-  handle('story:script', (projectId: string) => generateScript(projectId))
+  handle('story:script', (projectId: string, sceneCount?: number) => generateScript(projectId, sceneCount))
   handle('story:musicPrompt', (projectId: string) => generateMusicPrompt(projectId))
   handle('story:visuals', (projectId: string, mode: 'missing' | 'all') => generateVisuals(projectId, mode === 'all' ? 'all' : 'missing'))
 

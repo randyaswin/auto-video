@@ -5,6 +5,7 @@
  * it and speaks the voice-over, every file is imported onto its clip, and the project is exported.
  *
  *   node scripts/nexabot-produce.mjs --project <id> [--no-video] [--voice Achernar] [--name my-short]
+ *            [--scenes N] [--rebuild-script]
  *
  * Env: BANG_STORY_URL (default http://127.0.0.1:4627), NEXABOT_API_KEY or ~/.hermes/nexabot.env.
  * Run it where the project lives (the laptop): imported files must be readable by the app.
@@ -153,11 +154,13 @@ async function main() {
     }
     throw last
   }
-  console.log('[1/4] Naskah + storyboard (LLM Bang Story)')
+  const SCENES = opt('scenes') ? Number(opt('scenes')) : undefined
+  const REBUILD = flag('rebuild-script')
+  console.log(`[1/4] Naskah + storyboard (LLM Bang Story${SCENES ? `, ${SCENES} adegan` : ''}${REBUILD ? ', naskah ditulis ulang' : ''})`)
   let bundle = await api('projects:get', [PROJECT])
-  if (!bundle.clips.length) {
-    bundle = await retry('story:script', () => api('story:script', [PROJECT]))
-    bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, 'missing']))
+  if (!bundle.clips.length || REBUILD) {
+    bundle = await retry('story:script', () => api('story:script', [PROJECT, SCENES]))
+    bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, REBUILD ? 'all' : 'missing']))
   } else if (!bundle.clips.every((c) => c.visualPrompt)) {
     bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, 'missing']))
   }
