@@ -97,12 +97,17 @@ function put(url: string, headers: Record<string, string>, filePath?: string): P
  */
 async function insertCaptionsRaw(bearer: string, videoId: string, srtPath: string): Promise<{ ok: boolean; detail: string }> {
   const file = readFileSync(srtPath)
-  const boundary = 'bangstory' + Date.now().toString(36)
+  const boundary = '----------bangstory' + Date.now().toString(36)
   const meta = JSON.stringify({ snippet: { videoId, name: 'English', language: 'en', isDraft: false } })
+  // multipart/related: every part declares its own content type and length, the file rides as octet-stream.
   const body = Buffer.concat([
     Buffer.from(
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
-        `--${boundary}\r\nContent-Type: application/x-subrip\r\nContent-Disposition: attachment; filename="captions.srt"\r\n\r\n`
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: ${Buffer.byteLength(meta)}\r\n\r\n`
+    ),
+    Buffer.from(meta),
+    Buffer.from(
+      `\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n` +
+        `Content-Disposition: attachment; filename="captions.srt"\r\nContent-Length: ${file.length}\r\n\r\n`
     ),
     file,
     Buffer.from(`\r\n--${boundary}--\r\n`)
@@ -115,9 +120,8 @@ async function insertCaptionsRaw(bearer: string, videoId: string, srtPath: strin
       headers: {
         Authorization: `Bearer ${bearer}`,
         'Content-Type': `multipart/related; boundary=${boundary}`,
-        'Content-Length': String(body.length),
-        timeout: 120_000
-      } as any,
+        'Content-Length': String(body.length)
+      },
       timeout: 120_000
     }, (r) => {
       let raw = ''
