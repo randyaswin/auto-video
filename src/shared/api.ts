@@ -89,6 +89,17 @@ export interface StudioApi {
     /** Live model list from the provider. Served from cache unless `refresh` is set or the cache is stale. */
     list(source: ModelSource, refresh?: boolean): Promise<ModelList>
   }
+  youtube: {
+    upload(input: {
+      path: string
+      title: string
+      description?: string
+      tags?: string[]
+      privacy?: string
+      categoryId?: string
+      subtitlesPath?: string
+    }): Promise<{ id: string; url: string; privacy: string }>
+  }
   exporter: {
     start(projectId: string, options: ExportOptions): Promise<Job>
     defaultFolder(): Promise<string>

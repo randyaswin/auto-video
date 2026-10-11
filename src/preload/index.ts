@@ -65,6 +65,9 @@ const api: StudioApi = {
   models: {
     list: call('models:list')
   },
+  youtube: {
+    upload: call('youtube:upload')
+  },
   exporter: {
     start: call('export:start'),
     defaultFolder: call('export:defaultFolder'),

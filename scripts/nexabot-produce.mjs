@@ -234,17 +234,84 @@ async function main() {
     }
   ])
   const deadline = Date.now() + 20 * 60_000
+  let exported = null
   for (;;) {
     await sleep(2000)
     bundle = await api('projects:get', [PROJECT])
     const j = bundle.jobs.find((x) => x.id === job.id)
     if (j && ['done', 'failed', 'canceled'].includes(j.status)) {
       if (j.status !== 'done') throw new Error(`Ekspor ${j.status}: ${j.error ?? j.message ?? ''}`)
-      console.log(`[4/4] Selesai: ${j.message ?? folder}`)
+      exported = j.message ?? null
+      console.log(`[4/4] Selesai: ${exported ?? folder}`)
       break
     }
     if (Date.now() > deadline) throw new Error('Ekspor melebihi 20 menit')
   }
+
+  if (flag('publish')) {
+    if (!exported) throw new Error('Ekspor tidak mengembalikan path file, tidak bisa diunggah.')
+    console.log('[5/5] Unggah ke YouTube')
+    const meta = buildMetadata(bundle, opt('title'), opt('name'))
+    const srt = exported.replace(/\.mp4$/i, '.srt')
+    const up = await api('youtube:upload', [{
+      path: exported,
+      title: meta.title,
+      description: meta.description,
+      tags: meta.tags,
+      privacy: opt('privacy', 'private'),
+      ...(existsSync(srt) ? { subtitlesPath: srt } : {})
+    }])
+    console.log(`[5/5] Terunggah: ${up.url} (${up.privacy})`)
+  }
+}
+
+const STOP = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'your', 'you', 'are', 'was', 'were', 'how',
+  'why', 'what', 'when', 'into', 'than', 'then', 'they', 'them', 'their', 'have', 'has', 'but', 'not'
+])
+
+/**
+ * Title, description and tags straight from the project: synopsis, chapter timestamps and the full
+ * narration, so the video has real metadata instead of an empty box.
+ */
+function buildMetadata(bundle, titleOverride, fallbackName) {
+  const p = bundle.project
+  const clips = bundle.clips
+  const title = (titleOverride || p.title || fallbackName || 'Untitled').trim().slice(0, 100)
+  const narration = clips.map((c) => (c.narration || '').replace(/<[^>]*>/g, '').trim()).filter(Boolean)
+  const total = clips.reduce((n, c) => n + (c.durationMs || 0), 0)
+
+  let chapters = []
+  if (clips.length >= 3 && total >= 60_000) {
+    let acc = 0
+    chapters = clips.map((c) => {
+      const at = Math.round(acc / 1000)
+      acc += c.durationMs || 0
+      const label = (c.title || '').trim().replace(/\s+/g, ' ')
+      return label && label !== `Scene ${clips.indexOf(c) + 1}`
+        ? `${Math.floor(at / 60)}:${String(at % 60).padStart(2, '0')} ${label}`
+        : null
+    }).filter(Boolean)
+    if (chapters.length < 3) chapters = []
+  }
+
+  const description = [
+    title,
+    '',
+    chapters.length ? ['Chapters', ...chapters.map((c) => c), ''].join('\n') : '',
+    narration.join(' '),
+    '',
+    'Narrated and illustrated with AI. Facts checked before publishing.',
+    `Source project: Bang Story (${p.aspectRatio}, ${Math.round(total / 1000)}s).`
+  ].filter((x) => x !== '').join('\n').slice(0, 4800)
+
+  const words = `${title} ${p.synopsis ?? ''}`.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []
+  const tags = [
+    ...new Set([...words.filter((w) => !STOP.has(w)), 'science', 'education', 'how it works', 'documentary',
+      p.aspectRatio === '9:16' ? 'shorts' : 'video essay'])
+  ].slice(0, 30)
+
+  return { title, description, tags }
 }
 
 main()

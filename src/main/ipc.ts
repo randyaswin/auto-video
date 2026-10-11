@@ -63,6 +63,7 @@ import * as hf from './services/higgsfield'
 import * as llm from './services/llm'
 import { generateScript, generateVisuals, generateMusicPrompt } from './story'
 import { importClipMedia } from './media'
+import { youtubeUpload } from './youtube'
 
 
 type Handler = (...args: any[]) => unknown
@@ -157,6 +158,12 @@ function registerHandlers(): void {
     emit.asset(fresh)
     return fresh
   })
+  // Upload straight from the editor too: the web server and Hermes both reach this through /api/call.
+  handle('youtube:upload', (input: { path: string; title: string; description?: string; tags?: string[]; privacy?: string; categoryId?: string; subtitlesPath?: string }) =>
+    // Anything unknown goes up private — a typo must never publish a video.
+    youtubeUpload({ ...input, privacy: input.privacy === 'unlisted' || input.privacy === 'public' ? input.privacy : 'private' })
+  )
+
   // Media made by any generator outside the app (NexaBot, a phone) lands on a clip through here.
   handle('assets:importClip', (projectId: string, clipId: string, kind: 'image' | 'video' | 'audio', src: string) =>
     importClipMedia(projectId, clipId, kind, src)
