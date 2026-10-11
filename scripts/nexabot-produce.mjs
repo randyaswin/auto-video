@@ -5,13 +5,14 @@
  * it and speaks the voice-over, every file is imported onto its clip, and the project is exported.
  *
  *   node scripts/nexabot-produce.mjs --project <id> [--no-video] [--voice Achernar] [--name my-short]
- *            [--scenes N] [--rebuild-script] [--publish] [--publish-only] [--privacy private|unlisted|public]
+ *            [--scenes N] [--rebuild-script] [--publish] [--publish-only] [--recrop]
+ *            [--privacy private|unlisted|public]
  *
  * Env: BANG_STORY_URL (default http://127.0.0.1:4627), NEXABOT_API_KEY or ~/.hermes/nexabot.env.
  * Run it where the project lives (the laptop): imported files must be readable by the app.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
@@ -107,6 +108,21 @@ async function nexaJob(payload, out, key) {
   return out
 }
 
+/** The star sits bottom-right on stills too, and a still is what most long-form scenes are made of. */
+function cropWatermarkStill(src) {
+  const out = src.replace(/\.[a-z0-9]+$/i, '-crop.jpg')
+  const r = spawnSync(require('ffmpeg-static'), [
+    '-y', '-i', src,
+    '-vf', 'crop=iw*0.8435:ih*0.84375:iw*0.0778:0,scale=iw/0.8435:ih/0.84375:flags=lanczos',
+    '-q:v', '2', out
+  ], { encoding: 'utf8' })
+  if (r.status !== 0) {
+    console.warn('  crop gambar gagal, pakai hasil mentah:', (r.stderr ?? '').split('\n').slice(-3).join(' '))
+    return src
+  }
+  return out
+}
+
 /** The API burns a white star bottom-right; cropping it is cleaner than patching pixels. */
 function cropWatermark(src, scale) {
   const out = src.replace(/\.mp4$/, '-crop.mp4')
@@ -127,6 +143,51 @@ const styleFor = (aspectRatio) =>
   'no text, no letters, no numbers, no captions, no logos, no watermark anywhere in frame'
 
 const DATA_DIR = join(homedir(), '.bang-story')
+
+/** One-time: cut the star out of images that were imported before the crop existed; the untouched
+ * original moves to `<file>.orig`, which doubles as a marker so a second run never crops twice. */
+function recropImages(bundle) {
+  let n = 0
+  for (const asset of bundle.assets ?? []) {
+    if (asset.kind !== 'image' || !asset.localPath || !asset.clipId) continue
+    const abs = join(DATA_DIR, asset.localPath)
+    const kept = `${abs}.orig`
+    if (!existsSync(abs) || existsSync(kept)) continue
+    const cropped = cropWatermarkStill(abs)
+    if (cropped === abs) continue
+    renameSync(abs, kept)
+    renameSync(cropped, abs)
+    n++
+  }
+  return n
+}
+
+const GLIDE = ['zoomin', 'panright', 'zoomout', 'panleft', 'kenburns']
+
+/**
+ * A still scene plays as a frozen frame, and imported footage shorter than its scene is padded by
+ * cloning its last frame — a frozen tail. So before rendering, every scene gets a gentle move.
+ */
+async function smoothStillCameras(bundle) {
+  const still = bundle.clips.filter(
+    (c) => c.cameraPreset === 'static' || (c.motionType === 'video' && c.videoCamera === 'static')
+  )
+  if (!still.length) return 0
+  const pick = (seed) => GLIDE[[...seed].reduce((n, ch) => n + ch.charCodeAt(0), 0) % GLIDE.length]
+  const strip = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)))
+  const snap = {
+    project: strip(bundle.project, ['createdAt', 'updatedAt', 'coverAssetId']),
+    characters: (bundle.characters ?? []).map((c) => strip(c, ['sheetAssetId'])),
+    clips: bundle.clips.map((c) => {
+      const next = strip(c, ['imageAssetId', 'videoAssetId', 'audioAssetId'])
+      if (next.cameraPreset === 'static') next.cameraPreset = pick(c.id)
+      if (c.motionType === 'video' && next.videoCamera === 'static') next.videoCamera = pick(c.id + 'video')
+      return next
+    })
+  }
+  await api('projects:save', [snap])
+  return still.length
+}
 
 /** The app's asset row for a clip, so an existing image can be reused instead of paid for again. */
 function assetOf(bundle, clipId, kind) {
@@ -187,7 +248,7 @@ async function main() {
     try {
       if (!clip.imageAssetId) {
         const img = await stageImage(bundle, clip, i, key, ASPECT, STYLE)
-        await api('assets:importClip', [PROJECT, clip.id, 'image', img])
+        await api('assets:importClip', [PROJECT, clip.id, 'image', cropWatermarkStill(img)])
         console.log('     gambar ok')
       } else console.log('     gambar sudah ada, lewati')
 
@@ -236,6 +297,14 @@ async function main() {
     await publish(candidate)
     return
   }
+
+  const refreshed = await api('projects:get', [PROJECT])
+  if (flag('recrop')) {
+    const n = recropImages(refreshed)
+    if (n) console.log(`  ${n} gambar dibersihkan dari watermark`)
+  }
+  const smoothed = await smoothStillCameras(refreshed)
+  if (smoothed) console.log(`  ${smoothed} klip kamera diam diganti gerakan halus`)
 
   console.log('[3/4] Ekspor MP4')
   const job = await api('export:start', [

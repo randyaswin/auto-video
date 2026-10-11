@@ -263,8 +263,13 @@ export interface CaptionChunk {
  */
 export function estimateWordTimings(text: string, durationSec: number): WordTiming[] {
   // Voice tags (<short pause>, <whispers>) steer the TTS only; if they reach the caption they show up
-  // as literal text on screen. Anything starting with "<" is a tag, whole or cut off mid-word.
-  const tokens = text.split(/\s+/).filter(Boolean).filter((w) => !w.startsWith('<'))
+  // as literal text on screen. Strip whole tags first, then drop any token the split cut through the
+  // middle of a tag ("<short" / "pause>"), because neither half is a word the viewer should read.
+  const tokens = text
+    .replace(/<[^<>]*>?/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((w) => !/[<>]/.test(w))
   if (tokens.length === 0 || durationSec <= 0) return []
   const lead = Math.min(0.15, durationSec * 0.03)
   const tail = Math.min(0.25, durationSec * 0.05)
@@ -289,12 +294,13 @@ export function estimateWordTimings(text: string, durationSec: number): WordTimi
 /** Groups words into short caption lines, breaking on sentence ends, long pauses and length. */
 export function chunkWords(words: WordTiming[], maxWords = 5, maxChars = 30, key = '', offset = 0): CaptionChunk[] {
   // Voice tags (<short pause>, <whispers>) are directions for the TTS, never text for the viewer.
-  // Projects saved before the fix still carry them in their timings, and a tag can sit inside a word
-  // when the narration split mid-tag, so cut every angle-bracket run out and drop what is left empty.
+  // Projects saved before the fix still carry them in their timings, and a tag split mid-word leaves
+  // "pause>" behind — after cutting the bracket run, any leftover angle bracket means the whole token
+  // was tag debris, so the word is dropped instead of shipped to the viewer.
   const clean: WordTiming[] = []
   for (const w of words) {
     const text = w.text.replace(/<[^<>]*>?/g, '')
-    if (text.trim()) clean.push({ ...w, text })
+    if (text.trim() && !/[<>]/.test(text)) clean.push({ ...w, text })
   }
   const chunks: CaptionChunk[] = []
   let cur: WordTiming[] = []

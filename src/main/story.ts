@@ -314,6 +314,19 @@ export async function generateVisuals(projectId: string, mode: 'missing' | 'all'
   return getBundle(projectId)
 }
 
+const GLIDE: CameraPresetId[] = ['zoomin', 'panright', 'zoomout', 'panleft', 'kenburns']
+
+/**
+ * The plan often asks for a still shot; on a twenty-second scene that reads as a frozen player.
+ * Static camera only survives when the scene itself is shorter than a breath — otherwise pick a
+ * gentle move, varied per clip so consecutive scenes do not drift the same way.
+ */
+function movingPreset(camera: CameraPresetId, clip: Clip): CameraPresetId {
+  if (camera !== 'static') return CAMERA_IDS.includes(camera) ? camera : clip.cameraPreset
+  const seed = [...clip.id].reduce((n, ch) => n + ch.charCodeAt(0), 0)
+  return GLIDE[seed % GLIDE.length]
+}
+
 function toSceneVisual(clip: Clip, a: NonNullable<VisualPlan['scenes']>[number]): SceneVisual {
   const camera = str(a.camera) as CameraPresetId
   const strength = str(a.strength) as MotionStrength
@@ -322,7 +335,7 @@ function toSceneVisual(clip: Clip, a: NonNullable<VisualPlan['scenes']>[number])
     clipId: clip.id,
     visualPrompt: visualText(a),
     characterNames: Array.isArray(a.characters) ? a.characters.filter((n): n is string => typeof n === 'string') : [],
-    cameraPreset: CAMERA_IDS.includes(camera) ? camera : clip.cameraPreset,
+    cameraPreset: movingPreset(camera, clip),
     motionStrength: STRENGTH_IDS.includes(strength) ? strength : clip.motionStrength,
     videoPrompt: str(a.motion),
     transition: TRANSITION_IDS.includes(transition) ? transition : clip.transition
