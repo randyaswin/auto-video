@@ -18,7 +18,8 @@
     "dist": "npm run build && electron-builder --win --x64",
     "build:web": "npm run build && node scripts/build-web.mjs",
     "start:web": "node out/server/index.cjs",
-    "start:mcp": "node out/mcp/index.cjs"
+    "start:mcp": "node out/mcp/index.cjs",
+    "test:mcp": "node scripts/mcp-smoke.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",

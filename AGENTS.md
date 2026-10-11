@@ -14,6 +14,10 @@ npm run dev            # jalankan aplikasi dalam mode pengembangan (hot reload r
 npm run typecheck      # wajib bersih sebelum selesai: tsconfig.node.json + tsconfig.web.json
 npm run build          # build ke folder out/ (main, preload, renderer)
 npm run dist           # build + installer Windows (NSIS) ke folder dist/
+npm run build:web      # build renderer + bundel server web dan server MCP ke out/
+npm run start:web      # server web di http://127.0.0.1:4627 (BANG_STORY_PORT / BANG_STORY_HOST)
+npm run start:mcp      # server MCP (stdio) untuk klien MCP seperti Hermes
+npm run test:mcp       # smoke test MCP: seed proyek demo lalu ekspor MP4
 ```
 
 Tidak ada framework unit test. Verifikasi dilakukan dengan `npm run typecheck`, `npm run build`, dan **dev harness**
@@ -96,3 +100,4 @@ docs/              dokumentasi pengembang
 | Gaya kode dan aturan UI | [docs/konvensi.md](docs/konvensi.md) |
 | Keputusan teknis dan alasannya | [docs/keputusan-teknis.md](docs/keputusan-teknis.md) |
 | Masalah yang diketahui dan ide lanjutan | [docs/masalah-diketahui.md](docs/masalah-diketahui.md) |
+| Server web dan server MCP | [docs/web-dan-mcp.md](docs/web-dan-mcp.md) |
