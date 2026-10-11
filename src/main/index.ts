@@ -4,6 +4,7 @@ import { app, BrowserWindow, session, shell } from 'electron'
 import { closeDb, getDb } from './db'
 import { attachDevHarness, prepareHarness } from './devharness'
 import { resumeJobs } from './generation'
+import { subscribe } from './events'
 import { registerIpc } from './ipc'
 import { handleStudioProtocol, registerSchemes } from './protocol'
 import { warmUpEncryption } from './secrets'
@@ -34,6 +35,13 @@ prepareHarness()
 app.commandLine.appendSwitch('disable-direct-composition-video-overlays')
 
 registerSchemes()
+
+// The shared event fan-out reaches the renderer by pushing into every open window.
+subscribe((channel, payload) => {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(channel, payload)
+  }
+})
 
 /**
  * YouTube only plays embedded videos for embedders that identify themselves with an HTTP Referer, and a

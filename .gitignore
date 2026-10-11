@@ -1,6 +1,7 @@
 # Installed and generated: npm install / npm run build / npm run dist recreate these
 node_modules
-out
+out/
+.smoke-userdata/
 dist
 
 # Release archives belong on GitHub Releases, not in the repo

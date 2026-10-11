@@ -2,9 +2,9 @@ import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { cpus } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { once } from 'node:events'
-import { app, shell } from 'electron'
+import { appRoot, isElectron, isPackaged, openPath, resourcesRoot } from './platform'
 import ffmpegStatic from 'ffmpeg-static'
 import type { WhisperStatus } from '@shared/types'
 import { alignWords, splitHeard, type Heard } from './align'
@@ -31,8 +31,22 @@ export function modelDir(): string {
 
 const modelPath = (): string => join(modelDir(), MODEL.file)
 
+const cliName = (): string => (process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli')
+
+/**
+ * The bundled whisper.cpp binary ships for Windows only. Anywhere else it falls back to a
+ * `whisper-cli` on PATH, so a Linux or macOS host can install whisper.cpp itself and keep
+ * word-accurate captions instead of falling back to estimated timings.
+ */
 function cliPath(): string {
-  return app.isPackaged ? join(process.resourcesPath, 'whisper', 'whisper-cli.exe') : join(app.getAppPath(), 'resources', 'whisper', 'whisper-cli.exe')
+  const bundled =
+    isElectron && isPackaged() ? join(resourcesRoot(), 'whisper', cliName()) : join(appRoot(), 'resources', 'whisper', cliName())
+  if (existsSync(bundled)) return bundled
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    const found = dir ? join(dir, cliName()) : null
+    if (found && existsSync(found)) return found
+  }
+  return bundled
 }
 
 let download: { ctrl: AbortController; received: number; phase: 'downloading' | 'verifying' } | null = null
@@ -81,7 +95,7 @@ export async function downloadModel(): Promise<void> {
     if (download.received < MODEL.bytes) {
       const have = download.received
       // Development builds can fetch from a local copy (STUDIO_WHISPER_URL) to test resuming.
-      const url = (!app.isPackaged && process.env.STUDIO_WHISPER_URL) || MODEL.url
+      const url = (!isPackaged() && process.env.STUDIO_WHISPER_URL) || MODEL.url
       const res = await fetch(url, { headers: have ? { Range: `bytes=${have}-` } : {}, signal: ctrl.signal })
       if (!res.ok || !res.body) throw new Error(`Unduhan gagal (HTTP ${res.status})`)
       const resumed = res.status === 206
@@ -127,7 +141,7 @@ export function removeModel(): void {
 }
 
 export function openModelFolder(): void {
-  void shell.openPath(modelDir())
+  openPath(modelDir())
 }
 
 /** Whisper's language codes differ from ours only for Javanese. */

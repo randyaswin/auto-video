@@ -1,9 +1,9 @@
-import { app } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { appRoot, isElectron, isPackaged, resourcesRoot, userDataDir } from './platform'
 
 export function dataDir(): string {
-  return app.getPath('userData')
+  return userDataDir()
 }
 
 export function dbPath(): string {
@@ -28,13 +28,17 @@ export function assetAbsPath(projectId: string, localPath: string): string {
 }
 
 export function fontsDir(): string {
-  return app.isPackaged ? join(process.resourcesPath, 'fonts') : join(app.getAppPath(), 'resources', 'fonts')
+  if (isElectron && isPackaged()) return join(resourcesRoot(), 'fonts')
+  return join(appRoot(), 'resources', 'fonts')
 }
 
-/** URL the renderer uses for a stored asset (served by the studio:// protocol). */
+/**
+ * URL the renderer uses for a stored asset. Electron serves them from the `studio://` protocol;
+ * the web server serves the same paths over HTTP at `/studio/...`.
+ */
 export function assetUrl(projectId: string, localPath: string): string {
   const rel = `${projectId}/${localPath}`.split(/[\\/]/).map(encodeURIComponent).join('/')
-  return `studio://asset/${rel}`
+  return isElectron ? `studio://asset/${rel}` : `/studio/asset/${rel}`
 }
 
 /** ffmpeg-static / ffprobe-static paths, fixed up for the unpacked asar folder in the installed app. */

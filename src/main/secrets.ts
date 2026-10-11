@@ -1,6 +1,6 @@
-import { safeStorage } from 'electron'
 import type { ApiProvider, KeyStatus } from '@shared/types'
 import { getDb } from './db'
+import { decryptString, encryptString, warmUpEncryption as warmUpHostEncryption } from './platform'
 import { getSettings } from './settings'
 
 const PROVIDERS: ApiProvider[] = ['higgsfield', 'gemini', 'elevenlabs', 'openrouter', 'groq', 'custom']
@@ -28,19 +28,11 @@ interface SecretRow {
  * long before the user saves an API key, so killing the app (e.g. restarting the dev server) cannot orphan it.
  */
 export function warmUpEncryption(): void {
-  try {
-    if (safeStorage.isEncryptionAvailable()) safeStorage.encryptString('bang-story')
-  } catch {
-    // Encryption unavailable; keys fall back to plain storage below.
-  }
+  warmUpHostEncryption()
 }
 
 function decrypt(value: Buffer): string | null {
-  try {
-    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(value) : value.toString('utf8')
-  } catch {
-    return null
-  }
+  return decryptString(value)
 }
 
 function mask(key: string): string {
@@ -53,7 +45,7 @@ function row(provider: ApiProvider): SecretRow | undefined {
 }
 
 export function setSecret(provider: ApiProvider, value: string): void {
-  const enc = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(value) : Buffer.from(value, 'utf8')
+  const enc = encryptString(value)
   getDb()
     .prepare(
       `INSERT INTO secrets (provider, value) VALUES (?, ?)

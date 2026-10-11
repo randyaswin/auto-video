@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
-import { app } from 'electron'
+import { isPackaged } from '../platform'
 import type { CreditEstimate, KeyTestResult } from '@shared/types'
 import { getSecret, requireSecret } from '../secrets'
 import { ApiError, readError, sleep } from './http'
 
 // Development builds can point at a local mock (STUDIO_HF_BASE) to test the UI without spending credits.
-const BASE = (!app.isPackaged && process.env.STUDIO_HF_BASE) || 'https://api.higgsfield.ai'
+const BASE = (!isPackaged() && process.env.STUDIO_HF_BASE) || 'https://api.higgsfield.ai'
 
 export type HfStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | 'nsfw' | 'canceled'
 

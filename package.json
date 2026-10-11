@@ -15,12 +15,18 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "postinstall": "electron-builder install-app-deps",
-    "dist": "npm run build && electron-builder --win --x64"
+    "dist": "npm run build && electron-builder --win --x64",
+    "build:web": "npm run build && node scripts/build-web.mjs",
+    "start:web": "node out/server/index.cjs",
+    "start:mcp": "node out/mcp/index.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "better-sqlite3": "^13.0.3",
-    "ffmpeg-static": "^5.3.0"
+    "express": "^4.22.3",
+    "ffmpeg-static": "^5.3.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
@@ -28,6 +34,7 @@
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.9.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
@@ -35,6 +42,7 @@
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "esbuild": "^0.28.2",
     "lucide-react": "^1.49.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

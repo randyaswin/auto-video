@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import { copyFileSync, mkdirSync } from 'node:fs'
-import { basename, dirname, extname, join } from 'node:path'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
+import { basename, dirname, extname } from 'node:path'
+import {
+  appVersion,
+  copyText,
+  defaultVideosDir,
+  openExternal,
+  pickPath,
+  showItemInFolder
+} from './platform'
 import type {
   ApiProvider,
+  Asset,
   AppSettings,
   AspectRatio,
   ExportOptions,
@@ -58,15 +66,32 @@ import { generateScript, generateVisuals, generateMusicPrompt } from './story'
 
 type Handler = (...args: any[]) => unknown
 
+const handlers = new Map<string, Handler>()
+let built = false
+
 function handle(channel: string, fn: Handler): void {
-  ipcMain.handle(channel, async (_e, ...args) => {
-    try {
-      return await fn(...args)
-    } catch (e) {
-      // Only the message crosses the IPC boundary; keep it readable for the user.
-      throw new Error((e as Error)?.message ?? String(e))
-    }
-  })
+  handlers.set(channel, fn)
+}
+
+/**
+ * Runs one API channel. The same registry backs the Electron IPC bridge, the web server's
+ * `/api/call` route and the MCP server, so every host executes identical behaviour.
+ */
+export async function dispatch(channel: string, args: unknown[]): Promise<unknown> {
+  registerHandlers()
+  const fn = handlers.get(channel)
+  if (!fn) throw new Error(`Kanal tidak dikenal: ${channel}`)
+  try {
+    return await fn(...args)
+  } catch (e) {
+    // Only the message crosses the IPC boundary; keep it readable for the user.
+    throw new Error((e as Error)?.message ?? String(e))
+  }
+}
+
+export function channels(): string[] {
+  registerHandlers()
+  return [...handlers.keys()]
 }
 
 async function testProvider(provider: ApiProvider, key?: string): Promise<KeyTestResult> {
@@ -76,10 +101,12 @@ async function testProvider(provider: ApiProvider, key?: string): Promise<KeyTes
 }
 
 function defaultExportFolder(): string {
-  return getSettings().exportFolder ?? join(app.getPath('videos'), 'Bang Story')
+  return getSettings().exportFolder ?? defaultVideosDir()
 }
 
-export function registerIpc(): void {
+function registerHandlers(): void {
+  if (built) return
+  built = true
   handle('projects:list', () => listProjects())
   handle('projects:create', (input: NewProjectInput) => getBundle(createProject(input).id))
   handle('projects:get', (id: string) => getBundle(id))
@@ -130,55 +157,15 @@ export function registerIpc(): void {
     return fresh
   })
   handle('assets:pickMusic', async (projectId: string) => {
-    const win = BrowserWindow.getFocusedWindow()
-    const res = await dialog.showOpenDialog(win!, {
-      title: 'Pilih musik latar',
-      filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'ogg'] }],
-      properties: ['openFile']
-    })
-    if (res.canceled || !res.filePaths[0]) return null
-    getProject(projectId)
-    const src = res.filePaths[0]
-    const rel = `music/${randomUUID()}${extname(src).toLowerCase()}`
-    const abs = assetAbsPath(projectId, rel)
-    mkdirSync(dirname(abs), { recursive: true })
-    copyFileSync(src, abs)
-    const durationMs = await probeDurationMs(abs).catch(() => null)
-    return insertAsset({
-      projectId,
-      kind: 'music',
-      provider: 'local',
-      prompt: src.split(/[\\/]/).pop() ?? 'musik',
-      localPath: rel,
-      durationMs
-    })
+    const src = await pickPath({ title: 'Pilih musik latar', extensions: ['mp3', 'wav', 'm4a', 'ogg'] })
+    if (!src) return null
+    return importLocalAsset(projectId, 'music', src)
   })
 
   handle('assets:pickImage', async (projectId: string) => {
-    const win = BrowserWindow.getFocusedWindow()
-    const res = await dialog.showOpenDialog(win!, {
-      title: 'Pilih gambar logo atau watermark',
-      filters: [{ name: 'Gambar', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
-      properties: ['openFile']
-    })
-    if (res.canceled || !res.filePaths[0]) return null
-    getProject(projectId)
-    const src = res.filePaths[0]
-    const rel = `overlays/${randomUUID()}${extname(src).toLowerCase()}`
-    const abs = assetAbsPath(projectId, rel)
-    mkdirSync(dirname(abs), { recursive: true })
-    copyFileSync(src, abs)
-    const size = await probeSize(abs).catch(() => null)
-    if (!size) throw new Error('Gambar tidak bisa dibaca. Pakai file PNG, JPG, atau WebP.')
-    return insertAsset({
-      projectId,
-      kind: 'overlay',
-      provider: 'local',
-      prompt: basename(src),
-      localPath: rel,
-      width: size.width,
-      height: size.height
-    })
+    const src = await pickPath({ title: 'Pilih gambar logo atau watermark', extensions: ['png', 'jpg', 'jpeg', 'webp'] })
+    if (!src) return null
+    return importLocalAsset(projectId, 'overlay', src)
   })
 
   handle('settings:get', () => getSettings())
@@ -226,22 +213,60 @@ export function registerIpc(): void {
   handle('export:start', (projectId: string, opts: ExportOptions) => startExport(projectId, opts))
   handle('export:defaultFolder', () => defaultExportFolder())
   handle('export:pickFolder', async () => {
-    const win = BrowserWindow.getFocusedWindow()
-    const res = await dialog.showOpenDialog(win!, {
-      title: 'Pilih folder ekspor',
-      defaultPath: defaultExportFolder(),
-      properties: ['openDirectory', 'createDirectory']
-    })
-    if (res.canceled || !res.filePaths[0]) return null
-    setSettings({ exportFolder: res.filePaths[0] })
-    return res.filePaths[0]
+    const dir = await pickPath({ title: 'Pilih folder ekspor', defaultPath: defaultExportFolder(), directory: true })
+    if (!dir) return null
+    setSettings({ exportFolder: dir })
+    return dir
   })
-  handle('export:reveal', (path: string) => shell.showItemInFolder(path))
+  handle('export:reveal', (path: string) => showItemInFolder(path))
 
-  handle('app:version', () => app.getVersion())
-  handle('app:copyText', (text: string) => clipboard.writeText(String(text)))
+  handle('app:version', () => appVersion())
+  handle('app:copyText', (text: string) => copyText(String(text)))
   handle('app:openExternal', (url: string) => {
-    if (/^https:\/\//i.test(url)) return shell.openExternal(url)
+    if (/^https:\/\//i.test(url)) return openExternal(url)
     return undefined
   })
+}
+
+/**
+ * Copies a file that lives outside the app's data folder (native dialog, HTTP upload, a path the
+ * MCP client knows) into the project and registers it as an asset, so every host shares one rule set.
+ */
+export async function importLocalAsset(projectId: string, kind: 'music' | 'overlay', src: string): Promise<Asset> {
+  getProject(projectId)
+  const rel = `${kind === 'music' ? 'music' : 'overlays'}/${randomUUID()}${extname(src).toLowerCase()}`
+  const abs = assetAbsPath(projectId, rel)
+  mkdirSync(dirname(abs), { recursive: true })
+  copyFileSync(src, abs)
+  if (kind === 'music') {
+    const durationMs = await probeDurationMs(abs).catch(() => null)
+    return insertAsset({
+      projectId,
+      kind: 'music',
+      provider: 'local',
+      prompt: basename(src) ?? 'musik',
+      localPath: rel,
+      durationMs
+    })
+  }
+  const size = await probeSize(abs).catch(() => null)
+  if (!size) throw new Error('Gambar tidak bisa dibaca. Pakai file PNG, JPG, atau WebP.')
+  return insertAsset({
+    projectId,
+    kind: 'overlay',
+    provider: 'local',
+    prompt: basename(src),
+    localPath: rel,
+    width: size.width,
+    height: size.height
+  })
+}
+
+/** Binds every channel to `ipcMain`. Only the Electron entry may call this. */
+export function registerIpc(): void {
+  registerHandlers()
+  const { ipcMain } = require('electron') as typeof import('electron')
+  for (const channel of handlers.keys()) {
+    ipcMain.handle(channel, (_e, ...args: unknown[]) => dispatch(channel, args))
+  }
 }
