@@ -254,7 +254,12 @@ export async function generateVisuals(projectId: string, mode: 'missing' | 'all'
   const targets = clips.map((c, i) => ({ clip: c, n: i + 1 })).filter((t) => mode === 'all' || needsVisual(t.clip))
   if (!targets.length) return getBundle(projectId)
 
-  const known = charactersOf(projectId)
+  // One long-form project (25+ scenes) asks for more than the endpoint will answer at once, so the
+  // storyboard is requested in slices of eight and each slice is applied as it lands.
+  const BATCH = 8
+  for (let from = 0; from < targets.length; from += BATCH) {
+    const batch = targets.slice(from, from + BATCH)
+    const known = charactersOf(projectId)
   const system = [
     'You are the storyboard artist for a faceless YouTube video. The script is final; you design the pictures.',
     'For each requested scene you describe ONE still image, choose the camera move and its strength over that image, the transition into the next scene, and write how the image would move if it is animated as an AI video.',
@@ -267,43 +272,44 @@ export async function generateVisuals(projectId: string, mode: 'missing' | 'all'
     '6. No readable text, signs, captions or labels in the image. Vary shot sizes, angles and camera moves across scenes so the video never feels repetitive.',
     'Write "world", "identity", "outfit", "setting", "action", "wardrobe", "framing", "avoid" and "motion" in English.'
   ].join('\n')
-  const script = clips
-    .map((c, i) => `Scene ${i + 1}: ${c.title}\nStory: ${c.story || '(none)'}\nNarration (${languageOf(project.language)}): ${c.narration || '(none)'}`)
-    .join('\n\n')
-  const prompt = [
-    `Visual style of the video (for your framing choices only, do not repeat it in the descriptions): ${getStyle(project.styleId).name}.`,
-    `Frame format: ${project.aspectRatio === '9:16' ? 'vertical 9:16' : 'horizontal 16:9'}.`,
-    `Idea of the video: ${project.synopsis}`,
-    known.length ? `Existing characters (keep them exactly):\n${known.map((c) => `- ${c.name}: ${c.description}`).join('\n')}` : 'There are no existing characters yet.',
-    `Full script:\n${script}`,
-    `Write visuals for these scenes only: ${targets.map((t) => t.n).join(', ')}.`,
-    `Allowed camera values: ${CAMERA_IDS.join(', ')}. Allowed strength values: ${STRENGTH_IDS.join(', ')}. Allowed transition values: ${TRANSITION_IDS.join(', ')}.`
-  ].join('\n\n')
+    const script = batch
+      .map((t) => `Scene ${t.n}: ${t.clip.title}\nStory: ${t.clip.story || '(none)'}\nNarration (${languageOf(project.language)}): ${t.clip.narration || '(none)'}`)
+      .join('\n\n')
+    const prompt = [
+      `Visual style of the video (for your framing choices only, do not repeat it in the descriptions): ${getStyle(project.styleId).name}.`,
+      `Frame format: ${project.aspectRatio === '9:16' ? 'vertical 9:16' : 'horizontal 16:9'}.`,
+      `Idea of the video: ${project.synopsis}`,
+      known.length ? `Existing characters (keep them exactly):\n${known.map((c) => `- ${c.name}: ${c.description}`).join('\n')}` : 'There are no existing characters yet.',
+      `Full script:\n${script}`,
+      `Write visuals for these scenes only: ${batch.map((t) => t.n).join(', ')}.`,
+      `Allowed camera values: ${CAMERA_IDS.join(', ')}. Allowed strength values: ${STRENGTH_IDS.join(', ')}. Allowed transition values: ${TRANSITION_IDS.join(', ')}.`
+    ].join('\n\n')
 
-  const plan = await generateJson<VisualPlan>({ system, prompt, schema: VISUAL_SCHEMA, name: 'visuals' })
-  const answers = (plan.scenes ?? []).filter((s) => str(s.setting) || str(s.action))
-  if (!answers.length) throw new Error('Model tidak menghasilkan visual. Coba lagi atau pilih model lain di Pengaturan.')
+    const plan = await generateJson<VisualPlan>({ system, prompt, schema: VISUAL_SCHEMA, name: 'visuals' })
+    const answers = (plan.scenes ?? []).filter((s) => str(s.setting) || str(s.action))
+    if (!answers.length) throw new Error('Model tidak menghasilkan visual. Coba lagi atau pilih model lain di Pengaturan.')
 
-  // Match answers to scenes by number; anything unnumbered fills the remaining targets in order.
-  const byNumber = new Map<number, (typeof answers)[number]>()
-  const loose: typeof answers = []
-  for (const a of answers) {
-    const n = Number(a.scene)
-    if (Number.isInteger(n) && targets.some((t) => t.n === n) && !byNumber.has(n)) byNumber.set(n, a)
-    else loose.push(a)
+    // Match answers to scenes by number; anything unnumbered fills the remaining targets in order.
+    const byNumber = new Map<number, (typeof answers)[number]>()
+    const loose: typeof answers = []
+    for (const a of answers) {
+      const n = Number(a.scene)
+      if (Number.isInteger(n) && batch.some((t) => t.n === n) && !byNumber.has(n)) byNumber.set(n, a)
+      else loose.push(a)
+    }
+    const updates: SceneVisual[] = []
+    for (const t of batch) {
+      const a = byNumber.get(t.n) ?? loose.shift()
+      if (!a) continue
+      updates.push(toSceneVisual(t.clip, a))
+    }
+
+    applyVisuals(
+      projectId,
+      (plan.characters ?? []).filter((c) => str(c.name)).map((c) => ({ name: str(c.name), description: characterLook(c) })),
+      updates
+    )
   }
-  const updates: SceneVisual[] = []
-  for (const t of targets) {
-    const a = byNumber.get(t.n) ?? loose.shift()
-    if (!a) continue
-    updates.push(toSceneVisual(t.clip, a))
-  }
-
-  applyVisuals(
-    projectId,
-    (plan.characters ?? []).filter((c) => str(c.name)).map((c) => ({ name: str(c.name), description: characterLook(c) })),
-    updates
-  )
   return getBundle(projectId)
 }
 
