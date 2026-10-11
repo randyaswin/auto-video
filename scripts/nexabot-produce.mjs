@@ -108,7 +108,7 @@ async function nexaJob(payload, out, key) {
 /** The API burns a white star bottom-right; cropping it is cleaner than patching pixels. */
 function cropWatermark(src) {
   const out = src.replace(/\.mp4$/, '-crop.mp4')
-  const r = spawnSync(require('ffmpeg-static'), ['-y', '-i', src, '-vf', 'crop=911:1620:84:0,scale=1080:1920:flags=lanczos', '-c:a', 'copy', out], {
+  const r = spawnSync(require('ffmpeg-static'), ['-y', '-i', src, '-vf', 'crop=iw*0.8435:ih*0.84375:iw*0.0778:0,scale=1080:1920:flags=lanczos', '-c:a', 'copy', out], {
     encoding: 'utf8'
   })
   if (r.status !== 0) {
