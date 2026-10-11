@@ -289,9 +289,13 @@ export function estimateWordTimings(text: string, durationSec: number): WordTimi
 /** Groups words into short caption lines, breaking on sentence ends, long pauses and length. */
 export function chunkWords(words: WordTiming[], maxWords = 5, maxChars = 30, key = '', offset = 0): CaptionChunk[] {
   // Voice tags (<short pause>, <whispers>) are directions for the TTS, never text for the viewer.
-  // Projects saved before the fix still carry them in their stored timings, so drop them where every
-  // caption is shaped — preview, export and SRT all go through here.
-  const clean = words.filter((w) => !w.text.startsWith('<'))
+  // Projects saved before the fix still carry them in their timings, and a tag can sit inside a word
+  // when the narration split mid-tag, so cut every angle-bracket run out and drop what is left empty.
+  const clean: WordTiming[] = []
+  for (const w of words) {
+    const text = w.text.replace(/<[^<>]*>?/g, '')
+    if (text.trim()) clean.push({ ...w, text })
+  }
   const chunks: CaptionChunk[] = []
   let cur: WordTiming[] = []
   let from = 0
