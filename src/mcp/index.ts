@@ -7,6 +7,7 @@ import { getDb } from '../main/db'
 import { seedDemo } from '../main/demo'
 import { dispatch, importLocalAsset } from '../main/ipc'
 import { importClipMedia } from '../main/media'
+import { youtubeUpload, saveOauthClient } from '../main/youtube'
 import { assetAbsPath } from '../main/paths'
 import { getAsset, getBundle, getJob, listProjects } from '../main/repo'
 import type { Asset, Job, ProjectBundle } from '../shared/types'
@@ -308,6 +309,36 @@ server.registerTool(
     }
   },
   guard(async (a) => importClipMedia(a.projectId, a.clipId, a.kind, a.path))
+)
+
+server.registerTool(
+  'youtube_set_client',
+  {
+    description:
+      'Store the Google OAuth client id and secret used for YouTube uploads (one-time setup, saved mode 600).',
+    inputSchema: { clientId: z.string().min(1), clientSecret: z.string().min(1) }
+  },
+  guard(async (a) => {
+    saveOauthClient(a.clientId, a.clientSecret)
+    return 'Kredensial OAuth YouTube tersimpan. Selanjutnya jalankan scripts/youtube-auth.mjs untuk mengambil refresh token.'
+  })
+)
+
+server.registerTool(
+  'youtube_upload',
+  {
+    description:
+      'Upload a finished MP4 to YouTube (resumable, streamed from disk). Needs the refresh token from scripts/youtube-auth.mjs. Default privacy is private so nothing goes public by accident.',
+    inputSchema: {
+      path: z.string().min(1).describe('Absolute path of the MP4 on the laptop'),
+      title: z.string().min(1).max(100),
+      description: z.string().max(4800).optional(),
+      tags: z.array(z.string()).max(30).optional(),
+      privacy: z.enum(['private', 'unlisted', 'public']).optional().default('private'),
+      categoryId: z.string().optional().describe('YouTube category id, default 27 (Education)')
+    }
+  },
+  guard(async (a) => youtubeUpload(a))
 )
 
 server.registerTool(

@@ -141,13 +141,25 @@ async function stageImage(clip, index, key, aspect, style) {
 
 async function main() {
   const key = nexaKey()
+  // A long script can outlive the LLM endpoint's patience; retrying is cheaper than restarting by hand.
+  const retry = async (label, fn) => {
+    let last = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try { return await fn() } catch (e) {
+        last = e
+        console.warn(`     ${label} gagal (percobaan ${attempt}/3): ${e.message}`)
+        await sleep(15_000 * attempt)
+      }
+    }
+    throw last
+  }
   console.log('[1/4] Naskah + storyboard (LLM Bang Story)')
   let bundle = await api('projects:get', [PROJECT])
   if (!bundle.clips.length) {
-    bundle = await api('story:script', [PROJECT])
-    bundle = await api('story:visuals', [PROJECT, 'missing'])
+    bundle = await retry('story:script', () => api('story:script', [PROJECT]))
+    bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, 'missing']))
   } else if (!bundle.clips.every((c) => c.visualPrompt)) {
-    bundle = await api('story:visuals', [PROJECT, 'missing'])
+    bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, 'missing']))
   }
   console.log(`      ${bundle.clips.length} klip · bahasa ${bundle.project.language} · ${bundle.project.durationSec}s`)
 
