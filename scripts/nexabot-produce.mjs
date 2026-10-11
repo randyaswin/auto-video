@@ -72,17 +72,31 @@ async function nexaFetch(path, init, key) {
 
 /** Submits a job, waits for it, writes the result to `out`. Returns the output path. */
 async function nexaJob(payload, out, key) {
-  const submit = await nexaFetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, key)
-  const body = await submit.json().catch(() => ({}))
-  if (!submit.ok || !body.job_id) throw new Error(`NexaBot ${payload.mode}: ${body.error ?? `HTTP ${submit.status}`}`)
+  // The documented route enforces the credit balance (402 at zero credit) and ignores the active
+  // unlimited pass; the older /api/v1/generate honours it and answers the same way. Try both.
+  const submitted = { error: '' }
+  for (const path of ['/api', '/generate']) {
+    const res = await nexaFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, key)
+    const body = await res.json().catch(() => ({}))
+    if (body.ok && body.job_id) {
+      submitted.jobId = body.job_id
+      submitted.route = path
+      break
+    }
+    submitted.error = `${path}: ${body.error ?? body.message ?? `HTTP ${res.status}`}`
+  }
+  if (!submitted.jobId) throw new Error(`NexaBot ${payload.mode} gagal — ${submitted.error}`)
+  console.log(`     antri lewat ${submitted.route}`)
   const started = Date.now()
   for (;;) {
     await sleep(6000)
-    const res = await nexaFetch(`/jobs/${body.job_id}`, {}, key)
-    const state = (await res.json().catch(() => ({}))).status
+    const res = await nexaFetch(`/jobs/${submitted.jobId}`, {}, key)
+    const body = await res.json().catch(() => ({}))
+    const job = body.job ?? body
+    const state = job.status
     if (state === 'done') break
-    if (state === 'failed') throw new Error(`NexaBot job gagal: ${(await res.clone().json().catch(() => ({}))).error ?? 'tanpa pesan'}`)
-    if (Date.now() - started > 15 * 60_000) throw new Error(`NexaBot job ${body.job_id} melebihi 15 menit`)
+    if (state === 'failed') throw new Error(`NexaBot job gagal: ${job.error ?? job.status_text ?? 'tanpa pesan'}`)
+    if (Date.now() - started > 15 * 60_000) throw new Error(`NexaBot job ${submitted.jobId} melebihi 15 menit`)
     if (!['queued', 'processing', 'pending', undefined].includes(state)) throw new Error(`NexaBot status tak dikenal: ${state}`)
   }
   const dl = await nexaFetch(`/jobs/${body.job_id}/download`, {}, key)
