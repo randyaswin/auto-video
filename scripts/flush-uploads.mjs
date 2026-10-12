@@ -3,8 +3,8 @@
  * Sends the videos that waited out the daily upload quota. Runs once the quota resets (midnight
  * Pacific = 16:00/17:00 JST); anything still refused goes back on the list for the next attempt.
  *
- *   node scripts/flush-uploads.mjs            # 2 Shorts + 1 long-form (rithme harian yang Randy minta)
- *   node scripts/flush-uploads.mjs 5          # batas lain; kuota API sendiri 6 unggahan/hari
+ *   node scripts/flush-uploads.mjs            # ritme harian: 5 Shorts + 2 long-form
+ *   node scripts/flush-uploads.mjs 8 2        # override: 8 Shorts + 2 long-form (kuota API = 6/hari!)
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -17,9 +17,14 @@ if (!existsSync(file)) {
   console.log('Tidak ada video tertunda.')
   process.exit(0)
 }
-// Daily rhythm Randy asked for: NOT the API maximum. Three a day — two Shorts and one long-form —
-// so the channel grows at a human pace instead of dumping everything at once.
-const limit = process.argv[2] ? Number(process.argv[2]) : 3
+// Daily rhythm Randy asked for: five Shorts plus two long-form a day — steady, not a dump. (The API
+// itself allows six uploads a day, so five Shorts alone already sits near the ceiling; a refused
+// upload goes straight back on the list for the next run.)
+const dry = process.argv.includes('--dry-run')
+const args = process.argv.slice(2).filter((a) => a !== '--dry-run').map(Number).filter((n) => Number.isFinite(n))
+const quotaShorts = args[0] ?? 5
+const quotaLongs = args[1] ?? 2
+const limit = quotaShorts + quotaLongs
 const pending = JSON.parse(readFileSync(file, 'utf8'))
 
 // Long-form projects are listed in queue-longform.tsv; mix them into the batch instead of letting
@@ -30,15 +35,27 @@ if (existsSync(lfFile)) {
   longProjects = new Set(readFileSync(lfFile, 'utf8').split(/\n/).map((l) => l.split(/\s+/)[0]).filter(Boolean))
 }
 const isLong = (x) => longProjects.has(x.project)
-const shorts = pending.filter((x) => !isLong(x))
-const longs = pending.filter(isLong)
+const allShorts = pending.filter((x) => !isLong(x))
+const allLongs = pending.filter(isLong)
+const pickedShorts = allShorts.slice(0, quotaShorts)
+const pickedLongs = allLongs.slice(0, quotaLongs)
+// Spread the long-form across the Shorts instead of stacking them: one long-form at the end of every
+// stretch of Shorts, so a single day's uploads look like a mix, not a block.
 const ordered = []
-while (ordered.length < limit && (shorts.length || longs.length)) {
-  for (let k = 0; k < 2 && shorts.length && ordered.length < limit; k++) ordered.push(shorts.shift())
-  if (longs.length && ordered.length < limit) ordered.push(longs.shift())
-  if (!shorts.length && !longs.length) break
+const restShorts = allShorts.slice(quotaShorts)
+const restLongs = allLongs.slice(quotaLongs)
+while (pickedShorts.length || pickedLongs.length) {
+  const take = Math.ceil(pickedShorts.length / (pickedLongs.length + 1))
+  for (let i = 0; i < take && pickedShorts.length; i++) ordered.push(pickedShorts.shift())
+  if (pickedLongs.length) ordered.push(pickedLongs.shift())
 }
-pending.splice(0, pending.length, ...ordered, ...shorts, ...longs)
+if (dry) {
+  console.log(`Rencana kirim hari ini (${ordered.length}):`)
+  ordered.forEach((x, i) => console.log(`  ${i + 1}. ${x.name}${isLong(x) ? ' [long-form]' : ''}`))
+  console.log(`Sisa tertunda: ${pending.length - ordered.length}`)
+  process.exit(0)
+}
+pending.splice(0, pending.length, ...ordered, ...restShorts, ...restLongs)
 const rest = []
 let sent = 0
 for (const item of pending) {
