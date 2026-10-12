@@ -153,6 +153,11 @@ const styleFor = (aspectRatio, name = 'photo') => {
   return `${frame}, ${look}, ${NO_TEXT}`
 }
 
+/** A scene must still be showable if the storyboard forgot it: fall back to what is said. */
+const clean = (s) => (s || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+const visualOf = (clip) => clean(clip.visualPrompt) || clean(clip.narration) || clean(clip.title)
+const motionOf = (clip) => clean(clip.videoPrompt) || clean(clip.visualPrompt) || clean(clip.narration)
+
 const DATA_DIR = join(homedir(), '.bang-story')
 const GLIDE = ['zoomin', 'panright', 'zoomout', 'panleft', 'kenburns']
 
@@ -200,7 +205,7 @@ async function stageImage(bundle, clip, index, key, aspect, style) {
       return jpg
     }
   }
-  return nexaJob({ mode: 'img', prompt: `${clip.visualPrompt}. ${style}`, aspect }, jpg, key)
+  return nexaJob({ mode: 'img', prompt: `${visualOf(clip)}. ${style}`, aspect }, jpg, key)
 }
 
 async function main() {
@@ -224,8 +229,19 @@ async function main() {
   if (!bundle.clips.length || REBUILD) {
     bundle = await retry('story:script', () => api('story:script', [PROJECT, SCENES]))
     bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, REBUILD ? 'all' : 'missing']))
-  } else if (!bundle.clips.every((c) => c.visualPrompt)) {
+  }
+  // A storyboard slice can come back partial. Media built from an empty prompt is a picture of
+  // nothing — it neither shows the narration nor explains it — so ask again, and refuse to continue
+  // rather than quietly rendering scenes the viewer cannot follow.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const missing = bundle.clips.filter((c) => !(c.visualPrompt || '').trim()).length
+    if (!missing) break
+    console.log(`      storyboard belum lengkap (${missing} adegan tanpa visual), minta ulang…`)
     bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, 'missing']))
+  }
+  const blank = bundle.clips.map((c, i) => (!(c.visualPrompt || '').trim() ? i + 1 : 0)).filter(Boolean)
+  if (blank.length) {
+    throw new Error(`Storyboard gagal untuk adegan ${blank.join(', ')} — berhenti, karena gambar dari prompt kosong tidak menceritakan apa-apa.`)
   }
   console.log(`      ${bundle.clips.length} klip · bahasa ${bundle.project.language} · ${bundle.project.durationSec}s`)
 
@@ -252,7 +268,7 @@ async function main() {
           const vid = await nexaJob(
             {
               mode: 'sfv',
-              prompt: `${clip.videoPrompt || clip.visualPrompt}. Slow subtle camera movement, smooth continuous motion, ${STYLE}`,
+              prompt: `${motionOf(clip)}. Slow subtle camera movement, smooth continuous motion, ${STYLE}`,
               ratio: RATIO,
               resolution: 720,
               media: [`data:image/jpeg;base64,${(await readFile(jpg)).toString('base64')}`]

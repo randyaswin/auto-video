@@ -271,6 +271,7 @@ export async function generateVisuals(projectId: string, mode: 'missing' | 'all'
     '4. Clothing must suit the place and action: no spacesuits or helmets inside a pressurized room, a spacesuit outside on an airless surface, period clothing for history. A recurring character keeps their default outfit (source "reference") unless the scene needs something else; then use "custom" and describe the new outfit in full. Describe the clothing of every extra too.',
     '5. Keep every recurring character visually consistent: reuse the existing characters exactly as given (same name, identity and outfit) and only add characters that are missing. Characters are only people who appear in several scenes; one-off people are extras described inside the scene.',
     '6. No readable text, signs, captions or labels in the image. Vary shot sizes, angles and camera moves across scenes so the video never feels repetitive.',
+    '7. The channel has no host: never invent a presenter, teacher or mascot who talks to camera. People appear only when the narration actually names them; otherwise the subject itself — the object, animal, place or process being explained — is the hero of every shot, shown at the moment the narration describes.',
     'Write "world", "identity", "outfit", "setting", "action", "wardrobe", "framing", "avoid" and "motion" in English.'
   ].join('\n')
     const script = batch
