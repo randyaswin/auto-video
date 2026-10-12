@@ -6,7 +6,7 @@
  *
  *   node scripts/nexabot-produce.mjs --project <id> [--no-video] [--voice Achernar] [--name my-short]
  *            [--scenes N] [--rebuild-script] [--style photo|animation|3d|diagram] [--publish] [--publish-only] [--recrop]
- *            [--privacy private|unlisted|public]
+ *            [--privacy private|unlisted|public] [--voice <name>] [--redo-voice]
  *
  * Env: BANG_STORY_URL (default http://127.0.0.1:4627), NEXABOT_API_KEY or ~/.hermes/nexabot.env.
  * Run it where the project lives (the laptop): imported files must be readable by the app.
@@ -35,7 +35,9 @@ if (!PROJECT) {
   process.exit(1)
 }
 const WANT_VIDEO = !flag('no-video')
-const VOICE = opt('voice', 'Achernar')
+// Voice of the narration: a light, friendly male (Achernar is Google's soft FEMALE voice). Candidates:
+// Achird friendly · Umbriel easy-going · Schedar even · Charon informative · Iapetus clear.
+const VOICE = opt('voice', 'Achird')
 
 const RUN = join(STAGE, PROJECT) // staging per project — one project's image must never feed another
 mkdirSync(RUN, { recursive: true })
@@ -312,7 +314,8 @@ async function main() {
         }
       }
 
-      if (!clip.audioAssetId && clip.narration) {
+      const redoVoice = flag('redo-voice')
+      if ((redoVoice || !clip.audioAssetId) && clip.narration) {
         const wav = await nexaJob(
           { mode: 'tts', prompt: clip.narration, voice: VOICE },
           join(RUN, `${`${i}`.padStart(2, '0')}-tts.wav`),
