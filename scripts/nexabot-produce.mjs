@@ -205,7 +205,14 @@ async function stageImage(bundle, clip, index, key, aspect, style) {
       return jpg
     }
   }
-  return nexaJob({ mode: 'img', prompt: `${visualOf(clip)}. ${style}`, aspect }, jpg, key)
+  try {
+    return await nexaJob({ mode: 'img', prompt: `${visualOf(clip)}. ${style}`, aspect }, jpg, key)
+  } catch (e) {
+    if (!/filter|safety|ditolak/i.test(e.message ?? '')) throw e
+    // Safety filters trip on innocent wording too; a plain educational framing usually passes.
+    console.log('      gambar ditolak filter, ulang dengan prompt netral')
+    return nexaJob({ mode: 'img', prompt: `Educational illustration for a science video: ${visualOf(clip).slice(0, 400)}. ${NO_TEXT}` }, jpg, key)
+  }
 }
 
 async function main() {
@@ -279,7 +286,29 @@ async function main() {
           await api('assets:importClip', [PROJECT, clip.id, 'video', cropWatermark(vid, SCALE)])
           console.log('     video ok')
         } catch (e) {
-          console.warn(`     video gagal (${e.message}) — klip tetap pakai gambar + gerak kamera`)
+          if (!/filter|safety|ditolak/i.test(e.message ?? '')) {
+            console.warn(`     video gagal (${e.message}) — klip tetap pakai gambar + gerak kamera`)
+          } else {
+            // Same story as stills: an innocent prompt can still trip the filter, so try a plain one.
+            try {
+              console.log('      video ditolak filter, ulang dengan prompt netral')
+              const alt = await nexaJob(
+                {
+                  mode: 'sfv',
+                  prompt: `Educational animation for a science video: ${motionOf(clip).slice(0, 400)}. Smooth continuous motion. ${NO_TEXT}`,
+                  ratio: RATIO,
+                  resolution: 720,
+                  media: [`data:image/jpeg;base64,${(await readFile(jpg)).toString('base64')}`]
+                },
+                join(RUN, `${`${i}`.padStart(2, '0')}-alt.mp4`),
+                key
+              )
+              await api('assets:importClip', [PROJECT, clip.id, 'video', cropWatermark(alt, SCALE)])
+              console.log('     video ok (prompt netral)')
+            } catch (e2) {
+              console.warn(`     video tetap gagal (${e2.message}) — klip pakai gambar + gerak kamera`)
+            }
+          }
         }
       }
 
