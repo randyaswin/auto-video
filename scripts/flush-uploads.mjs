@@ -58,16 +58,29 @@ if (dry) {
 pending.splice(0, pending.length, ...ordered, ...restShorts, ...restLongs)
 const rest = []
 let sent = 0
-for (const item of pending) {
+let blocked = false
+for (let i = 0; i < pending.length; i++) {
+  const item = pending[i]
   if (sent >= limit) { rest.push(item); continue }
   console.log(`Kirim ${item.name} …`)
   const r = spawnSync(process.execPath, [
     join(dirname(fileURLToPath(import.meta.url)), 'nexabot-produce.mjs'),
     '--project', item.project, '--name', item.name, '--publish-only',
     '--privacy', item.privacy ?? 'private'
-  ], { stdio: 'inherit' })
-  if (r.status === 0) { sent++; console.log(`  terkirim: ${item.name}`) }
-  else { console.log(`  masih tertunda: ${item.name}`); rest.push(item) }
+  ], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
+  process.stdout.write(out.endsWith('\n') ? out : `${out}\n`)
+  if (r.status === 0) { sent++; console.log(`  terkirim: ${item.name}`); continue }
+  console.log(`  masih tertunda: ${item.name}`)
+  rest.push(item)
+  // A refused upload still bills the API's daily quota, so stop at the first refusal instead of
+  // spending the whole quota (and the queue's time) on attempts that cannot succeed.
+  if (/Kuota unggah|uploadLimitExceeded|exceeded the number of videos/i.test(out)) {
+    console.log('  kuota YouTube habis — berhenti; percobaan berikutnya pada jadwal berikutnya.')
+    blocked = true
+    for (const x of pending.slice(i + 1)) rest.push(x)
+    break
+  }
 }
 // While this run was uploading, a produce run may have put its own deferred video on the list;
 // merge instead of overwriting, or that entry disappears.
@@ -75,4 +88,4 @@ let current = []
 try { current = JSON.parse(readFileSync(file, 'utf8')) } catch { /* first time */ }
 const kept = [...rest, ...current.filter((x) => !rest.some((y) => y.name === x.name))]
 writeFileSync(file, JSON.stringify(kept, null, 2))
-console.log(`Selesai. Terkirim ${sent}, masih tertunda ${kept.length}.`)
+console.log(`Selesai. Terkirim ${sent}, masih tertunda ${kept.length}${blocked ? ' (kuota YouTube habis)' : ''}.`)

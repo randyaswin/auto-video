@@ -272,8 +272,11 @@ async function main() {
       } else console.log('     gambar sudah ada, lewati')
 
       if (WANT_VIDEO && !clip.videoAssetId) {
+        // Declared outside the try so the filter-rejection fallback below can reuse it; keeping it
+        // inside made that branch throw `jpg is not defined` and quietly fall back to a still.
+        let jpg = null
         try {
-          const jpg = await stageImage(bundle, clip, i, key, ASPECT, STYLE)
+          jpg = await stageImage(bundle, clip, i, key, ASPECT, STYLE)
           const vid = await nexaJob(
             {
               mode: 'sfv',
@@ -290,6 +293,8 @@ async function main() {
         } catch (e) {
           if (!/filter|safety|ditolak/i.test(e.message ?? '')) {
             console.warn(`     video gagal (${e.message}) — klip tetap pakai gambar + gerak kamera`)
+          } else if (!jpg) {
+            console.warn(`     video ditolak sebelum gambar siap (${e.message}) — klip pakai gambar + gerak kamera`)
           } else {
             // Same story as stills: an innocent prompt can still trip the filter, so try a plain one.
             try {
