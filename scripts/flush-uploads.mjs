@@ -69,5 +69,10 @@ for (const item of pending) {
   if (r.status === 0) { sent++; console.log(`  terkirim: ${item.name}`) }
   else { console.log(`  masih tertunda: ${item.name}`); rest.push(item) }
 }
-writeFileSync(file, JSON.stringify(rest, null, 2))
-console.log(`Selesai. Terkirim ${sent}, masih tertunda ${rest.length}.`)
+// While this run was uploading, a produce run may have put its own deferred video on the list;
+// merge instead of overwriting, or that entry disappears.
+let current = []
+try { current = JSON.parse(readFileSync(file, 'utf8')) } catch { /* first time */ }
+const kept = [...rest, ...current.filter((x) => !rest.some((y) => y.name === x.name))]
+writeFileSync(file, JSON.stringify(kept, null, 2))
+console.log(`Selesai. Terkirim ${sent}, masih tertunda ${kept.length}.`)

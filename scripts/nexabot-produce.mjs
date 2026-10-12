@@ -387,6 +387,10 @@ async function main() {
  * the whole run, the finished file waits its turn in `pending-uploads.json`; `flush-uploads.mjs` sends
  * them when the quota resets.
  */
+/** How many uploads went back on the list because the daily quota was full; the exit code tells a
+ * flush run that nothing was actually sent, so the item stays on the list. */
+let deferred = 0
+
 function queuePending(item) {
   const file = join(homedir(), '.bang-story', 'pending-uploads.json')
   let list = []
@@ -416,6 +420,7 @@ async function publish(filePath) {
     if (!/uploadLimitExceeded|exceeded the number of videos/i.test(e.message ?? '')) throw e
     queuePending({ project: PROJECT, name: opt('name'), file: filePath, privacy: opt('privacy', 'private') })
     console.log('[5/5] Kuota unggah YouTube habis — video menunggu di pending-uploads.json')
+    deferred++
     return null
   }
   console.log(`[5/5] Terunggah: ${up.url} (${up.privacy})`)
@@ -472,7 +477,7 @@ function buildMetadata(bundle, titleOverride, fallbackName) {
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => process.exit(deferred ? 3 : 0))
   .catch((e) => {
     console.error('GAGAL:', e.message)
     process.exit(1)
