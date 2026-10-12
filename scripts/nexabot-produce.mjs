@@ -35,9 +35,9 @@ if (!PROJECT) {
   process.exit(1)
 }
 const WANT_VIDEO = !flag('no-video')
-// Voice of the narration: a light, friendly male (Achernar is Google's soft FEMALE voice). Candidates:
-// Achird friendly · Umbriel easy-going · Schedar even · Charon informative · Iapetus clear.
-const VOICE = opt('voice', 'Achird')
+// Voice of the narration, picked by Randy: Schedar — male, even and light (Achernar is the soft FEMALE
+// voice this replaced; Achird friendly · Umbriel easy-going are the runners-up).
+const VOICE = opt('voice', 'Schedar')
 
 const RUN = join(STAGE, PROJECT) // staging per project — one project's image must never feed another
 mkdirSync(RUN, { recursive: true })
