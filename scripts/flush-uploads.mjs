@@ -57,6 +57,7 @@ if (dry) {
 }
 pending.splice(0, pending.length, ...ordered, ...restShorts, ...restLongs)
 const rest = []
+const sentNames = new Set()
 let sent = 0
 let blocked = false
 for (let i = 0; i < pending.length; i++) {
@@ -70,7 +71,7 @@ for (let i = 0; i < pending.length; i++) {
   ], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
   process.stdout.write(out.endsWith('\n') ? out : `${out}\n`)
-  if (r.status === 0) { sent++; console.log(`  terkirim: ${item.name}`); continue }
+  if (r.status === 0) { sent++; sentNames.add(item.name); console.log(`  terkirim: ${item.name}`); continue }
   console.log(`  masih tertunda: ${item.name}`)
   rest.push(item)
   // A refused upload still bills the API's daily quota, so stop at the first refusal instead of
@@ -86,6 +87,9 @@ for (let i = 0; i < pending.length; i++) {
 // merge instead of overwriting, or that entry disappears.
 let current = []
 try { current = JSON.parse(readFileSync(file, 'utf8')) } catch { /* first time */ }
-const kept = [...rest, ...current.filter((x) => !rest.some((y) => y.name === x.name))]
+const kept = [
+  ...rest,
+  ...current.filter((x) => !rest.some((y) => y.name === x.name) && !sentNames.has(x.name))
+]
 writeFileSync(file, JSON.stringify(kept, null, 2))
 console.log(`Selesai. Terkirim ${sent}, masih tertunda ${kept.length}${blocked ? ' (kuota YouTube habis)' : ''}.`)
