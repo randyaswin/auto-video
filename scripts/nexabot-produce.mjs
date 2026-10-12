@@ -12,11 +12,11 @@
  * Run it where the project lives (the laptop): imported files must be readable by the app.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 const require = createRequire(import.meta.url)
 const BASE = process.env.BANG_STORY_URL ?? 'http://100.115.185.3:4627' // laptop tailnet IP; the server is bound to it, not to loopback
@@ -382,20 +382,42 @@ async function main() {
 }
 
 /** Title, description, tags and the .srt straight onto YouTube. */
+/**
+ * YouTube's daily upload quota runs out long before a full day of rendering does. Instead of failing
+ * the whole run, the finished file waits its turn in `pending-uploads.json`; `flush-uploads.mjs` sends
+ * them when the quota resets.
+ */
+function queuePending(item) {
+  const file = join(homedir(), '.bang-story', 'pending-uploads.json')
+  let list = []
+  try { list = JSON.parse(readFileSync(file, 'utf8')) } catch { /* first time */ }
+  if (!list.some((x) => x.name === item.name)) list.push(item)
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, JSON.stringify(list, null, 2))
+}
+
 async function publish(filePath) {
   if (!filePath) throw new Error('Ekspor tidak mengembalikan path file, tidak bisa diunggah.')
   console.log('[5/5] Unggah ke YouTube')
   const bundle = await api('projects:get', [PROJECT])
   const meta = buildMetadata(bundle, opt('title'), opt('name'))
   const srt = filePath.replace(/\.mp4$/i, '.srt')
-  const up = await api('youtube:upload', [{
+  let up
+  try {
+    up = await api('youtube:upload', [{
     path: filePath,
     title: meta.title,
     description: meta.description,
     tags: meta.tags,
     privacy: opt('privacy', 'private'),
     ...(existsSync(srt) ? { subtitlesPath: srt } : {})
-  }])
+    }])
+  } catch (e) {
+    if (!/uploadLimitExceeded|exceeded the number of videos/i.test(e.message ?? '')) throw e
+    queuePending({ project: PROJECT, name: opt('name'), file: filePath, privacy: opt('privacy', 'private') })
+    console.log('[5/5] Kuota unggah YouTube habis — video menunggu di pending-uploads.json')
+    return null
+  }
   console.log(`[5/5] Terunggah: ${up.url} (${up.privacy})`)
   return up
 }
