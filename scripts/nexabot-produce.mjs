@@ -5,7 +5,7 @@
  * it and speaks the voice-over, every file is imported onto its clip, and the project is exported.
  *
  *   node scripts/nexabot-produce.mjs --project <id> [--no-video] [--voice Achernar] [--name my-short]
- *            [--scenes N] [--rebuild-script] [--publish] [--publish-only] [--recrop]
+ *            [--scenes N] [--rebuild-script] [--style photo|animation|3d|diagram] [--publish] [--publish-only] [--recrop]
  *            [--privacy private|unlisted|public]
  *
  * Env: BANG_STORY_URL (default http://127.0.0.1:4627), NEXABOT_API_KEY or ~/.hermes/nexabot.env.
@@ -136,11 +136,22 @@ function cropWatermark(src, scale) {
   return out
 }
 
-/** Framing clauses follow the project's aspect ratio: 9:16 Shorts vs 16:9 long-form. */
-const styleFor = (aspectRatio) =>
-  `cinematic ${aspectRatio === '16:9' ? 'widescreen 16:9' : 'vertical 9:16'} frame, photorealistic, ` +
-  'natural lighting, shallow depth of field, ' +
-  'no text, no letters, no numbers, no captions, no logos, no watermark anywhere in frame'
+/**
+ * Look of the scenes, chosen with `--style`. Explanations ("how X works") read better as animation or
+ * a cutaway illustration than as photography; behaviour and place topics want the real thing.
+ */
+const NO_TEXT = 'no text, no letters, no numbers, no captions, no logos, no watermark anywhere in frame'
+const STYLES = {
+  photo: () => 'photorealistic, natural lighting, shallow depth of field',
+  animation: () => 'bright 2D animation style, clean vector illustration, flat cel shading, bold outlines',
+  '3d': () => 'stylized 3D animation render, smooth materials, soft studio lighting, gentle rim light',
+  diagram: () => 'cutaway scientific illustration, cross-section view, clean geometry, muted background'
+}
+const styleFor = (aspectRatio, name = 'photo') => {
+  const frame = `cinematic ${aspectRatio === '16:9' ? 'widescreen 16:9' : 'vertical 9:16'} frame`
+  const look = (STYLES[name] ?? STYLES.photo)()
+  return `${frame}, ${look}, ${NO_TEXT}`
+}
 
 const DATA_DIR = join(homedir(), '.bang-story')
 const GLIDE = ['zoomin', 'panright', 'zoomout', 'panleft', 'kenburns']
@@ -222,7 +233,9 @@ async function main() {
   const ASPECT = AR === '16:9' ? 2 : 5
   const SCALE = AR === '16:9' ? '1920:1080' : '1080:1920'
   const RATIO = AR === '16:9' ? 1 : 2 // NexaBot: 1 landscape, 2 portrait
-  const STYLE = styleFor(AR)
+  const styleName = opt('style', 'photo')
+  if (!STYLES[styleName]) throw new Error(`Gaya tidak dikenal: ${styleName} (pilihan: ${Object.keys(STYLES).join(', ')})`)
+  const STYLE = styleFor(AR, styleName)
   console.log(`[2/4] Media NexaBot (gambar${WANT_VIDEO ? ' + video' : ''} + suara, ${AR})`)
   for (const [i, clip] of bundle.clips.entries()) {
     console.log(`  -- klip ${i}: ${(clip.title || clip.narration || '').slice(0, 50)}`)
