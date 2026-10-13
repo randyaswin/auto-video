@@ -231,12 +231,25 @@ async function main() {
     }
     throw last
   }
-  const SCENES = opt('scenes') ? Number(opt('scenes')) : undefined
+  const ASKED = opt('scenes') ? Number(opt('scenes')) : 0
   const REBUILD = flag('rebuild-script')
-  console.log(`[1/4] Naskah + storyboard (LLM Bang Story${SCENES ? `, ${SCENES} adegan` : ''}${REBUILD ? ', naskah ditulis ulang' : ''})`)
   let bundle = await api('projects:get', [PROJECT])
+  // Every NexaBot clip is exactly 10.01 s (no duration parameter). A scene longer than that can only be
+  // filled by looping the clip or by a frozen tail, and both are banned, so the scene count follows the
+  // target length at ~9 s a scene and any smaller count from the command line is raised, not used.
+  const AUTO = Math.max(4, Math.ceil((bundle.project.durationSec ?? 60) / 9))
+  const SCENES = Math.max(ASKED, AUTO)
+  // 16 spoken words ≈ 8.4 s at the measured 1.9 words/s, still inside the 10 s clip with TTS pauses.
+  const WORD_CAP = 16
+  const words = (t) => (t || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
+  console.log(`[1/4] Naskah + storyboard (LLM Bang Story${SCENES ? `, ${SCENES} adegan (maks ${WORD_CAP} kata)` : ''}${REBUILD ? ', naskah ditulis ulang' : ''})`)
   if (!bundle.clips.length || REBUILD) {
-    bundle = await retry('story:script', () => api('story:script', [PROJECT, SCENES]))
+    bundle = await retry('story:script', async () => {
+      const b = await api('story:script', [PROJECT, SCENES])
+      const over = b.clips.filter((c) => words(c.narration) > WORD_CAP)
+      if (over.length) throw new Error(`naskah kelewat panjang: ${over.length} adegan melebihi ${WORD_CAP} kata`)
+      return b
+    })
     bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, REBUILD ? 'all' : 'missing']))
   }
   // A storyboard slice can come back partial. Media built from an empty prompt is a picture of

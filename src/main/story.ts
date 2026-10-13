@@ -69,10 +69,17 @@ export async function generateScript(projectId: string, sceneCount?: number): Pr
     'The narration is voiced by an expressive text-to-speech model. Where it helps the delivery, add a few English vocal tags in angle brackets inside the narration, such as <short pause>, <long pause>, <chuckles>, <sigh>, <gasp> or <whispers>. Use them sparingly, at most one or two per scene, and never other markup.',
     `Write everything in ${lang}, except the vocal tags, which stay in English.`
   ].join(' ')
+  // Each scene becomes one clip with one generated video behind it, and those clips are exactly 10 s
+  // long, so the voice-over per scene has to stay well inside that: the budget here is what keeps a
+  // scene from outgrowing its footage.
+  const wordsPerScene = Math.max(5, Math.floor((project.durationSec / count) * 1.6))
   const prompt = [
     `Idea / synopsis:\n${project.synopsis}`,
     `Target video length: about ${project.durationSec} seconds.`,
-    `Write exactly ${count} scenes.`
+    `Write exactly ${count} scenes.`,
+    `Each scene's voice-over: at most ${wordsPerScene} spoken words (a single short breath, roughly ${Math.round(
+      project.durationSec / count
+    )} seconds of speech) — never a paragraph, never two sentences stacked. Spread the story across all ${count} scenes instead of loading words into a few.`
   ].join('\n\n')
 
   const plan = await generateJson<ScriptPlan>({ system, prompt, schema: SCRIPT_SCHEMA, name: 'script' })
