@@ -72,7 +72,9 @@ export async function generateScript(projectId: string, sceneCount?: number): Pr
   // Each scene becomes one clip with one generated video behind it, and those clips are exactly 10 s
   // long, so the voice-over per scene has to stay well inside that: the budget here is what keeps a
   // scene from outgrowing its footage.
-  const wordsPerScene = Math.max(5, Math.floor((project.durationSec / count) * 2.0))
+  // Measured with the production voice (Schedar): 25 words speak over 10.7 s, and each generated clip
+  // is exactly 10 s, so ask for the fullest narration that still fits: 19 words ≈ 8.2 s of speech.
+  const wordsPerScene = Math.max(5, Math.min(19, Math.floor((project.durationSec / count) * 2.2)))
   const prompt = [
     `Idea / synopsis:\n${project.synopsis}`,
     `Target video length: about ${project.durationSec} seconds.`,
