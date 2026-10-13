@@ -345,10 +345,18 @@ async function renderSegment(
   if (video) {
     const cam = cameraPerspective(clip.videoCamera, clip.videoStrength, Math.max(2, Math.round(seg.own * opts.fps)), opts.fps)
     const work = cam ? workSize(video.width, video.height, size) : size
-    const vf = cameraChain(cam, work, size, [`fps=${opts.fps}`, `tpad=stop_mode=clone:stop_duration=${len.toFixed(3)}`])
+    // Imported footage is a few seconds long while a narrated scene can run half a minute. Filling the
+    // gap by cloning the last frame freezes the picture while the narration keeps going, so the clip
+    // loops instead and the camera move carries on across the loops. The small clone pad only covers
+    // the rounding at the very end, where the loop cannot fill a partial frame.
+    const vf = cameraChain(cam, work, size, [`fps=${opts.fps}`, 'tpad=stop_mode=clone:stop_duration=0.5'])
     // A video trimmed on the timeline starts that far into its file.
     const from = clip.mediaInMs > 0 ? ['-ss', (clip.mediaInMs / 1000).toFixed(3)] : []
-    await runFfmpeg([...from, '-i', assetAbsPath(bundle.project.id, video.localPath), '-vf', vf, '-t', len.toFixed(3), ...enc, out], tmp, signal)
+    await runFfmpeg(
+      ['-stream_loop', '-1', ...from, '-i', assetAbsPath(bundle.project.id, video.localPath), '-vf', vf, '-t', len.toFixed(3), ...enc, out],
+      tmp,
+      signal
+    )
     return out
   }
   const image = assetOf(bundle, clip.imageAssetId)
