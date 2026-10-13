@@ -239,8 +239,9 @@ async function main() {
   // target length at ~9 s a scene and any smaller count from the command line is raised, not used.
   const AUTO = Math.max(4, Math.ceil((bundle.project.durationSec ?? 60) / 9))
   const SCENES = Math.max(ASKED, AUTO)
-  // 16 spoken words ≈ 8.4 s at the measured 1.9 words/s, still inside the 10 s clip with TTS pauses.
-  const WORD_CAP = 16
+  // Measured with the Schedar voice: 25 words spoke over 10.72 s (≈ 2.33 words/s including the vocal
+  // tags), so 19 words lands near 8.2 s — safely inside the 10 s clip with room for a slow read.
+  const WORD_CAP = 19
   const words = (t) => (t || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
   console.log(`[1/4] Naskah + storyboard (LLM Bang Story${SCENES ? `, ${SCENES} adegan (maks ${WORD_CAP} kata)` : ''}${REBUILD ? ', naskah ditulis ulang' : ''})`)
   if (!bundle.clips.length || REBUILD) {

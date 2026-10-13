@@ -72,7 +72,7 @@ export async function generateScript(projectId: string, sceneCount?: number): Pr
   // Each scene becomes one clip with one generated video behind it, and those clips are exactly 10 s
   // long, so the voice-over per scene has to stay well inside that: the budget here is what keeps a
   // scene from outgrowing its footage.
-  const wordsPerScene = Math.max(5, Math.floor((project.durationSec / count) * 1.6))
+  const wordsPerScene = Math.max(5, Math.floor((project.durationSec / count) * 2.0))
   const prompt = [
     `Idea / synopsis:\n${project.synopsis}`,
     `Target video length: about ${project.durationSec} seconds.`,
