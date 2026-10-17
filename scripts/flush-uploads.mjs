@@ -68,7 +68,13 @@ for (let i = 0; i < pending.length; i++) {
     join(dirname(fileURLToPath(import.meta.url)), 'nexabot-produce.mjs'),
     '--project', item.project, '--name', item.name, '--publish-only',
     '--privacy', item.privacy ?? 'private'
-  ], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  ], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    // The web server binds the Tailscale address, so a bare localhost default would make every
+    // publish attempt die with "fetch failed"; keep whatever the caller exported, else use that address.
+    env: { ...process.env, BANG_STORY_URL: process.env.BANG_STORY_URL ?? 'http://100.115.185.3:4627' }
+  })
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
   process.stdout.write(out.endsWith('\n') ? out : `${out}\n`)
   if (r.status === 0) { sent++; sentNames.add(item.name); console.log(`  terkirim: ${item.name}`); continue }
