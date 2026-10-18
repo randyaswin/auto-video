@@ -7,18 +7,23 @@ cd ~/bang-story || exit 1
 LOG=/tmp/lf-supervisor.log
 DONE=/tmp/lf-supervisor.done
 : >> "$LOG"
-: > "$DONE"
+# LF_KEEP_DONE=1 keeps the finished list (a second run then only picks up what is still missing).
+[ -z "${LF_KEEP_DONE:-}" ] && : > "$DONE"
+# LF_ONLY=<nama> narik satu proyek saja, untuk melanjutkan tanpa mengulang yang sudah selesai.
 TARGETS=$'e6eeed3e-8924-4648-a29a-6094fe49f232 lf-moon-face photo\nce81431d-47d6-4cb5-ac3f-aeadd0317b1a lf-eyes-sight diagram\n0fbe217c-a781-4620-837b-a1c567720019 lf-magnetic-shield diagram'
 
 for round in $(seq 1 10); do
   sisa=0
   while read -r proj name style; do
     [ -z "$name" ] && continue
+    [ -n "${LF_ONLY:-}" ] && [ "$name" != "$LF_ONLY" ] && continue
     grep -q "^$name\$" "$DONE" && continue
     sisa=1
     echo "[putaran $round] $name mulai $(date '+%F %T')"
+    # No --rebuild-script: a 67-scene long-form script is already stored scene by scene, and produce
+    # resumes from whatever exists — only the missing media is generated again.
     BANG_STORY_URL=http://100.115.185.3:4627 node scripts/nexabot-produce.mjs \
-      --project "$proj" --name "$name" --style "$style" --rebuild-script > "/tmp/nx-full-$name.log" 2>&1
+      --project "$proj" --name "$name" --style "$style" > "/tmp/nx-full-$name.log" 2>&1
     rc=$?
     echo "[putaran $round] $name EXIT=$rc $(date '+%F %T')"
     if [ "$rc" = 0 ]; then
