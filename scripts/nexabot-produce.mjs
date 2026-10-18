@@ -222,11 +222,13 @@ async function main() {
   // A long script can outlive the LLM endpoint's patience; retrying is cheaper than restarting by hand.
   const retry = async (label, fn) => {
     let last = null
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // A long-form script is one huge JSON reply from a slow endpoint; give it more attempts and a
+    // longer breath between them rather than giving up while the queue still has hours of media to make.
+    for (let attempt = 1; attempt <= 5; attempt++) {
       try { return await fn() } catch (e) {
         last = e
-        console.warn(`     ${label} gagal (percobaan ${attempt}/3): ${e.message}`)
-        await sleep(15_000 * attempt)
+        console.warn(`     ${label} gagal (percobaan ${attempt}/5): ${e.message}`)
+        await sleep(30_000 * attempt)
       }
     }
     throw last

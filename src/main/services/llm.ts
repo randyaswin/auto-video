@@ -9,7 +9,9 @@ import { extractJson } from './json'
 const STALE_MS = 24 * 60 * 60 * 1000
 // Long-form projects ask for a whole storyboard JSON in one reply; the custom endpoint used here is
 // slower than the hosted ones, and a 4-minute ceiling turned every 8-minute script into a failure.
-const GENERATE_TIMEOUT_MS = 12 * 60 * 1000
+// 12 minutes still failed the 67-scene long-form scripts (repeated 408/504), so the ceiling is now a
+// half hour — a slow reply is fine, a reply that never arrives is what kills a render.
+const GENERATE_TIMEOUT_MS = 30 * 60 * 1000
 
 type CompatProvider = Exclude<LlmProvider, 'gemini'>
 
