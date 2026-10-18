@@ -77,10 +77,13 @@ async function nexaFetch(path, init, key) {
 
 /** Submits a job, waits for it, writes the result to `out`. Returns the output path. */
 async function nexaJob(payload, out, key) {
-  // The documented route enforces the credit balance (402 at zero credit) and ignores the active
-  // unlimited pass; the older /api/v1/generate honours it and answers the same way. Try both.
+  // `/generate` (the web route) honours the unlimited pass; `/api` (the documented route) always
+  // charges the credit balance even while the pass is active. Unlimited therefore goes first, and the
+  // credit route is only the fallback for when the unlimited one answers 429 too often. NEXABOT_ROUTE=api
+  // flips the order back if the pass is ever dropped.
+  const ROUTES = (process.env.NEXABOT_ROUTE ?? 'unlimited') === 'api' ? ['/api', '/generate'] : ['/generate', '/api']
   const submitted = { error: '' }
-  for (const path of ['/api', '/generate']) {
+  for (const path of ROUTES) {
     const res = await nexaFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, key)
     const body = await res.json().catch(() => ({}))
     if (body.ok && body.job_id) {
