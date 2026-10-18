@@ -246,12 +246,34 @@ async function main() {
   const WORD_CAP = 19
   const words = (t) => (t || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length
   console.log(`[1/4] Naskah + storyboard (LLM Bang Story${SCENES ? `, ${SCENES} adegan (maks ${WORD_CAP} kata)` : ''}${REBUILD ? ', naskah ditulis ulang' : ''})`)
-  if (!bundle.clips.length || REBUILD) {
+  const capOk = (b) => {
+    const over = b.clips.filter((c) => words(c.narration) > WORD_CAP)
+    if (over.length) throw new Error(`naskah kelewat panjang: ${over.length} adegan melebihi ${WORD_CAP} kata`)
+    return b
+  }
+  const CHUNK = 12
+  if (SCENES > CHUNK) {
+    // Long-form: the script arrives 12 scenes at a time. Each call is small enough to actually
+    // finish, and every call appends to what already exists — so a failed run keeps its completed
+    // scenes and the next run continues from `bundle.clips.length` instead of starting over.
+    if (REBUILD && bundle.clips.length) {
+      const n = Math.min(CHUNK, SCENES)
+      bundle = await retry(`story:scriptChunk 1..${n}`, () => api('story:scriptChunk', [PROJECT, 0, n, SCENES, true]).then(capOk))
+    }
+    while (bundle.clips.length < SCENES) {
+      const start = bundle.clips.length
+      const n = Math.min(CHUNK, SCENES - start)
+      console.log(`      naskah adegan ${start + 1}-${start + n} dari ${SCENES} …`)
+      bundle = await retry(`story:scriptChunk ${start + 1}..${start + n}`, () =>
+        api('story:scriptChunk', [PROJECT, start, n, SCENES, false]).then(capOk)
+      )
+      if (bundle.clips.length <= start) throw new Error('potongan naskah tidak menambah adegan — coba lagi')
+    }
+    bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, 'missing']))
+  } else if (!bundle.clips.length || REBUILD) {
     bundle = await retry('story:script', async () => {
       const b = await api('story:script', [PROJECT, SCENES])
-      const over = b.clips.filter((c) => words(c.narration) > WORD_CAP)
-      if (over.length) throw new Error(`naskah kelewat panjang: ${over.length} adegan melebihi ${WORD_CAP} kata`)
-      return b
+      return capOk(b)
     })
     bundle = await retry('story:visuals', () => api('story:visuals', [PROJECT, REBUILD ? 'all' : 'missing']))
   }

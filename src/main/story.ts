@@ -3,7 +3,7 @@ import { LANGUAGES, clipCountFor } from '@shared/models'
 import { estimateNarrationMs, needsVisual } from '@shared/script'
 import { getStyle } from '@shared/styles'
 import type { CameraPresetId, Clip, MotionStrength, MusicPrompt, ProjectBundle, TransitionId } from '@shared/types'
-import { applyVisuals, charactersOf, clipsOf, getBundle, getProject, replaceScript, type SceneVisual } from './repo'
+import { appendScript, applyVisuals, charactersOf, clipsOf, getBundle, getProject, replaceScript, type SceneVisual } from './repo'
 import { generateJson } from './services/llm'
 
 const CAMERA_IDS = CAMERA_PRESETS.map((c) => c.id)
@@ -98,6 +98,69 @@ export async function generateScript(projectId: string, sceneCount?: number): Pr
       durationMs: estimateNarrationMs(str(c.narration))
     }))
   )
+  return getBundle(projectId)
+}
+
+/**
+ * Writes the next slice of a long script: one LLM call per chunk instead of the whole video at once.
+ * A timeout or a rejected reply costs only that chunk, the scenes already on disk stay, and the next
+ * call continues at `startIndex` — which is what makes a long-form render resumable.
+ * `reset` wipes existing scenes first and is only meant for the first chunk of a rewrite.
+ */
+export async function generateScriptChunk(
+  projectId: string,
+  startIndex: number,
+  count: number,
+  total: number,
+  reset = false
+): Promise<ProjectBundle> {
+  const project = getProject(projectId)
+  if (!project.synopsis.trim()) throw new Error('Tulis ide cerita atau sinopsis dulu.')
+  const lang = languageOf(project.language)
+  const wordsPerScene = Math.max(5, Math.min(19, Math.floor((project.durationSec / Math.max(total, 1)) * 2.2)))
+  const already = getBundle(projectId).clips
+  const previous = already.slice(-2).map((c) => `- ${c.title}: ${str(c.story).slice(0, 160)}`)
+  const system = [
+    'You are a scriptwriter for faceless YouTube storytelling and explainer videos.',
+    'You turn an idea into a sequence of short scenes. Each scene has one line of voice-over.',
+    'The first scene is a strong hook. The story has a clear beginning, rising tension and a satisfying ending. The last scene can invite viewers to subscribe.',
+    'Keep facts accurate for history and science topics, and always call each character by the same name.',
+    'The narration is voiced by an expressive text-to-speech model. Where it helps the delivery, add a few English vocal tags in angle brackets inside the narration, such as <short pause>, <long pause>, <chuckles>, <sigh>, <gasp> or <whispers>. Use them sparingly, at most one or two per scene, and never other markup.',
+    `Write everything in ${lang}, except the vocal tags, which stay in English.`
+  ].join(' ')
+  const prompt = [
+    `Idea / synopsis:\n${project.synopsis}`,
+    `Target video length: about ${project.durationSec} seconds, told in exactly ${total} scenes.`,
+    previous.length
+      ? `Scenes already written earlier (continue from there, never repeat them):\n${previous.join('\n')}`
+      : '',
+    `Write ONLY scene ${startIndex + 1} to ${startIndex + count} of ${total} now — exactly ${count} scenes, so the next call can continue after yours.`,
+    `Each scene's voice-over: at most ${wordsPerScene} spoken words (a single short breath, roughly ${Math.round(
+      project.durationSec / total
+    )} seconds of speech) — never a paragraph, never two sentences stacked.`
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+  const plan = await generateJson<ScriptPlan>({ system, prompt, schema: SCRIPT_SCHEMA, name: 'script' })
+  const scenes = (plan.scenes ?? []).filter((c) => str(c.narration) || str(c.story))
+  if (!scenes.length) throw new Error('Model tidak menghasilkan adegan untuk potongan ini. Coba lagi.')
+  const mapped = scenes.map((c, i) => ({
+    title: str(c.title) || `Adegan ${startIndex + i + 1}`,
+    story: str(c.story),
+    narration: str(c.narration),
+    durationMs: estimateNarrationMs(str(c.narration))
+  }))
+  // The word cap is enforced here as well: a scene already written into the database can no longer be
+  // rejected by the caller, so refuse the whole chunk while it is still on the wire — nothing is
+  // appended and the next attempt simply rewrites this slice.
+  const over = mapped.filter(
+    (s) => s.narration.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length > 19
+  )
+  if (over.length) throw new Error(`Potongan ini kelewat panjang: ${over.length} adegan melebihi 19 kata.`)
+  const title = str(plan.title) || project.title
+  if (reset) replaceScript(projectId, title, mapped)
+  else appendScript(projectId, mapped)
   return getBundle(projectId)
 }
 

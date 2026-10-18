@@ -61,7 +61,7 @@ import * as eleven from './services/elevenlabs'
 import * as gemini from './services/gemini'
 import * as hf from './services/higgsfield'
 import * as llm from './services/llm'
-import { generateScript, generateVisuals, generateMusicPrompt } from './story'
+import { generateScript, generateScriptChunk, generateVisuals, generateMusicPrompt } from './story'
 import { importClipMedia, recropProjectImages } from './media'
 import { youtubeUpload } from './youtube'
 
@@ -117,6 +117,12 @@ function registerHandlers(): void {
   handle('projects:duplicate', (id: string) => duplicateProject(id))
 
   handle('story:script', (projectId: string, sceneCount?: number) => generateScript(projectId, sceneCount))
+  // Long-form: the script arrives in slices so a timeout costs one slice, not the whole video.
+  handle(
+    'story:scriptChunk',
+    (projectId: string, startIndex: number, count: number, total: number, reset?: boolean) =>
+      generateScriptChunk(projectId, startIndex, count, total, reset)
+  )
   handle('story:musicPrompt', (projectId: string) => generateMusicPrompt(projectId))
   handle('story:visuals', (projectId: string, mode: 'missing' | 'all') => generateVisuals(projectId, mode === 'all' ? 'all' : 'missing'))
 

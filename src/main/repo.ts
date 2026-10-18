@@ -481,6 +481,24 @@ export function replaceScript(projectId: string, title: string, scenes: ScriptSc
   })()
 }
 
+/**
+ * Appends scenes to the script that is already there. Long-form scripts are written in chunks, so a
+ * failed call only costs the chunk it was working on and the next run picks up where the last one
+ * stopped instead of starting the whole script over.
+ */
+export function appendScript(projectId: string, scenes: ScriptScene[]): void {
+  const db = getDb()
+  const head = db.prepare('SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM clips WHERE project_id = ?').get(projectId) as { n: number }
+  db.transaction(() => {
+    const insert = db.prepare(
+      `INSERT INTO clips (id, project_id, sort, title, story, narration, duration_ms, character_ids)
+       VALUES (?, ?, ?, ?, ?, ?, ?, '[]')`
+    )
+    scenes.forEach((c, i) => insert.run(randomUUID(), projectId, head.n + i, c.title, c.story, c.narration, c.durationMs))
+    db.prepare("UPDATE projects SET status = 'script', step = 2, updated_at = ? WHERE id = ?").run(Date.now(), projectId)
+  })()
+}
+
 export interface SceneVisual {
   clipId: string
   visualPrompt: string
