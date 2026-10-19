@@ -12,7 +12,7 @@
  * Run it where the project lives (the laptop): imported files must be readable by the app.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
@@ -434,6 +434,16 @@ async function main() {
       if (j.status !== 'done') throw new Error(`Ekspor ${j.status}: ${j.error ?? j.message ?? ''}`)
       exported = j.message ?? null
       console.log(`[4/4] Selesai: ${exported ?? folder}`)
+      logProduction({
+        at: new Date().toISOString(),
+        event: 'render',
+        project: PROJECT,
+        name: opt('name', ''),
+        kind: SCENES > 12 ? 'long-form' : 'shorts',
+        scenes: bundle.clips.length,
+        seconds: Math.round(bundle.clips.reduce((n, c) => n + (c.durationMs || 0), 0) / 1000),
+        file: exported
+      })
       break
     }
     if (Date.now() > deadline) throw new Error('Ekspor melebihi 20 menit')
@@ -451,6 +461,20 @@ async function main() {
 /** How many uploads went back on the list because the daily quota was full; the exit code tells a
  * flush run that nothing was actually sent, so the item stays on the list. */
 let deferred = 0
+
+/**
+ * Every render and every upload is appended to `~/.bang-story/production-log.jsonl`. The journal is the
+ * source Randy asks for when he asks what was made and what went up — chat memory is not.
+ */
+const JOURNAL = join(homedir(), '.bang-story', 'production-log.jsonl')
+function logProduction(entry) {
+  try {
+    mkdirSync(dirname(JOURNAL), { recursive: true })
+    appendFileSync(JOURNAL, `${JSON.stringify(entry)}\n`)
+  } catch (e) {
+    console.warn('  jurnal produksi tidak bisa ditulis:', e.message)
+  }
+}
 
 function queuePending(item) {
   const file = join(homedir(), '.bang-story', 'pending-uploads.json')
@@ -485,6 +509,16 @@ async function publish(filePath) {
     return null
   }
   console.log(`[5/5] Terunggah: ${up.url} (${up.privacy})`)
+  logProduction({
+    at: new Date().toISOString(),
+    event: 'upload',
+    project: PROJECT,
+    name: opt('name', ''),
+    title: meta.title,
+    privacy: up.privacy,
+    url: up.url,
+    file: filePath
+  })
   return up
 }
 
