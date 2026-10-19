@@ -303,7 +303,11 @@ async function main() {
   if (!STYLES[styleName]) throw new Error(`Gaya tidak dikenal: ${styleName} (pilihan: ${Object.keys(STYLES).join(', ')})`)
   const STYLE = styleFor(AR, styleName)
   console.log(`[2/4] Media NexaBot (gambar${WANT_VIDEO ? ' + video' : ''} + suara, ${AR})`)
-  for (const [i, clip] of bundle.clips.entries()) {
+  // Media jobs are submitted in parallel: NexaBot holds every request in its queue for minutes, so
+  // finishing one clip before starting the next leaves the pipeline idle most of the time. With the
+  // unlimited pass there is no credit left to protect — NEXABOT_JOBS only caps how many run at once.
+  const JOBS = Math.max(1, Math.min(8, Number(process.env.NEXABOT_JOBS ?? 5)))
+  const oneClip = async (i, clip) => {
     console.log(`  -- klip ${i}: ${(clip.title || clip.narration || '').slice(0, 50)}`)
     try {
       if (!clip.imageAssetId) {
@@ -375,6 +379,17 @@ async function main() {
       console.warn(`     klip ${i} sebagian gagal: ${e.message}`)
     }
   }
+  const clips = bundle.clips
+  let cursor = 0
+  await Promise.all(
+    Array.from({ length: Math.min(JOBS, clips.length) }, async () => {
+      for (;;) {
+        const i = cursor++
+        if (i >= clips.length) return
+        await oneClip(i, clips[i])
+      }
+    })
+  )
 
   const folder = await api('export:defaultFolder')
   if (flag('publish-only')) {

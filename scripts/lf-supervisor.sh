@@ -12,7 +12,9 @@ DONE=/tmp/lf-supervisor.done
 # LF_ONLY=<nama> narik satu proyek saja, untuk melanjutkan tanpa mengulang yang sudah selesai.
 TARGETS=$'e6eeed3e-8924-4648-a29a-6094fe49f232 lf-moon-face photo\nce81431d-47d6-4cb5-ac3f-aeadd0317b1a lf-eyes-sight diagram\n0fbe217c-a781-4620-837b-a1c567720019 lf-magnetic-shield diagram'
 
-for round in $(seq 1 10); do
+# Rounds are effectively endless and there is no rest between them: with the unlimited NexaBot pass
+# the pipeline should keep generating, and only a failure costs a short wait before the next try.
+for round in $(seq 1 999); do
   sisa=0
   while read -r proj name style; do
     [ -z "$name" ] && continue
@@ -34,7 +36,7 @@ for round in $(seq 1 10); do
     fi
   done <<< "$TARGETS"
   [ "$sisa" = 0 ] && break
-  echo "[putaran $round] istirahat 10 menit sebelum coba lagi"
-  sleep 600
+  echo "[putaran $round] lanjut putaran berikutnya (jeda 30 dtk)"
+  sleep 30
 done
 echo "SUPERVISOR_SELESAI $(date '+%F %T')"

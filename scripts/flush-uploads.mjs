@@ -25,7 +25,18 @@ const args = process.argv.slice(2).filter((a) => a !== '--dry-run').map(Number).
 const quotaShorts = args[0] ?? 5
 const quotaLongs = args[1] ?? 2
 const limit = quotaShorts + quotaLongs
-const pending = JSON.parse(readFileSync(file, 'utf8'))
+let pending = JSON.parse(readFileSync(file, 'utf8'))
+
+// A name that already went up once never goes up again. A project can reach this queue twice (an
+// earlier direct publish plus a later render), and a duplicate silently costs one of the six
+// daily upload slots. The ledger is written after every successful upload.
+const ledgerFile = join(homedir(), '.bang-story', 'uploaded-names.json')
+const uploaded = new Set(existsSync(ledgerFile) ? JSON.parse(readFileSync(ledgerFile, 'utf8')) : [])
+const dupes = pending.filter((x) => uploaded.has(x.name))
+if (dupes.length) {
+  console.log(`Lewati yang sudah pernah tayang: ${dupes.map((d) => d.name).join(', ')}`)
+  pending = pending.filter((x) => !uploaded.has(x.name))
+}
 
 // Long-form projects are listed in queue-longform.tsv; mix them into the batch instead of letting
 // every long-form sit at the back of the queue behind two dozen Shorts.
@@ -77,7 +88,14 @@ for (let i = 0; i < pending.length; i++) {
   })
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
   process.stdout.write(out.endsWith('\n') ? out : `${out}\n`)
-  if (r.status === 0) { sent++; sentNames.add(item.name); console.log(`  terkirim: ${item.name}`); continue }
+  if (r.status === 0) {
+    sent++
+    sentNames.add(item.name)
+    uploaded.add(item.name)
+    writeFileSync(ledgerFile, JSON.stringify([...uploaded].sort(), null, 2))
+    console.log(`  terkirim: ${item.name}`)
+    continue
+  }
   console.log(`  masih tertunda: ${item.name}`)
   rest.push(item)
   // A refused upload still bills the API's daily quota, so stop at the first refusal instead of
