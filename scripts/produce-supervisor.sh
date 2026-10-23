@@ -11,11 +11,20 @@ credit() {
   curl -s -m 25 https://nexabot.id/api/v1/api/credit -H "x-api-key: $K" \
     | python3 -c "import sys,json;print(json.load(sys.stdin).get('credit',0))" 2>/dev/null || echo 0
 }
+# Cookie sesi web (bukan API key) yang membuka pass unlimited. JWT-nya berumur 30 hari dan diperbarui
+# setiap kali dipakai, jadi OTP hanya perlu kalau sesi benar-benar mati (dilaporkan lalu supervisor berhenti).
 for round in $(seq 1 9999); do
+  echo "[putaran $round] mulai $(date '+%F %T')" >> "$LOG"
+  refresh=$(node scripts/nexabot-refresh-cookie.mjs 2>&1)
+  rc=$?
+  echo "[putaran $round] cookie: $refresh" >> "$LOG"
+  if [ "$rc" -ne 0 ]; then
+    echo "[putaran $round] SESI MATI — perlu login OTP sekali; supervisor berhenti" >> "$LOG"
+    break
+  fi
   C=$(credit)
-  echo "[putaran $round] kredit=$C $(date '+%F %T')" >> "$LOG"
-  if python3 -c "import sys;sys.exit(0 if float('${C:-0}')>=1.0 else 1)"; then
-    echo "[putaran $round] kredit cukup, produksi jalan" >> "$LOG"
+  echo "[putaran $round] kredit=$C (tidak dipakai saat unlimited)" >> "$LOG"
+  if true; then
     bash scripts/run-queue.sh >> "$LOG" 2>&1
     [ -f scripts/queue-longform.tsv ] && [ -s scripts/queue-longform.tsv ] && xargs -P 1 -n 3 sh -c 'BANG_STORY_URL=http://100.115.185.3:4627 node scripts/nexabot-produce.mjs --project "$0" --name "$1" --style "$2" > "/tmp/nx-$1.log" 2>&1; echo "$1 EXIT=$?" >> '"$LOG"'' < scripts/queue-longform.tsv
     echo "[putaran $round] produksi selesai $(date '+%F %T')" >> "$LOG"

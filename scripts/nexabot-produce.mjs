@@ -21,7 +21,11 @@ import { dirname, join } from 'node:path'
 const require = createRequire(import.meta.url)
 const BASE = process.env.BANG_STORY_URL ?? 'http://100.115.185.3:4627' // laptop tailnet IP; the server is bound to it, not to loopback
 const NEXA = 'https://nexabot.id/api/v1'
-const STAGE = join(tmpdir(), 'nexabot-produce')
+// Telegram account the unlimited pass belongs to; the web route expects it in the body.
+const TELEGRAM_ID = process.env.NEXABOT_TELEGRAM_ID ?? '607315970'
+// Staging holds every downloaded clip until export, so it must survive a full /tmp (tmpfs on Fedora,
+// which filled up mid-job and produced cryptic "Unknown system error -122, write" failures).
+const STAGE = process.env.BANG_STORY_STAGE ?? join(homedir(), '.cache', 'nexabot-produce')
 
 const argv = process.argv.slice(2)
 const opt = (name, fallback = null) => {
@@ -64,10 +68,38 @@ async function api(channel, args = []) {
   return body.result
 }
 
+/**
+ * The web session cookie is what actually unlocks the unlimited pass: an API key alone is billed
+ * per request and answers 402 once the balance is under 0.15. `~/.hermes/nexabot-cookie.txt` holds
+ * `nexabot_session=…; nexabot_otp_ticket=…` harvested from a logged-in browser; when it is present,
+ * jobs are submitted through `/generate` with `use_unlimited: true`.
+ */
+function nexaCookie() {
+  const f = join(homedir(), '.hermes', 'nexabot-cookie.txt')
+  if (!existsSync(f)) return ''
+  return readFileSync(f, 'utf8').trim()
+}
 async function nexaFetch(path, init, key) {
+  const cookie = nexaCookie()
   let res
-  for (let attempt = 0; attempt < 4; attempt++) {
-    res = await fetch(`${NEXA}${path}`, { ...init, headers: { ...(init?.headers ?? {}), 'x-api-key': key } })
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const headers = { ...(init?.headers ?? {}) }
+    if (cookie) {
+      headers.Cookie = cookie
+      headers.Origin = NEXA
+      headers.Referer = `${NEXA}/`
+    } else {
+      headers['x-api-key'] = key
+    }
+    res = await fetch(`${NEXA}${path}`, { ...init, headers })
+    // 401/403 is not proof the session died: the previous job on the same account can still be
+    // running, and the web route answers that with a rejection as well. Treat it as a transient
+    // "busy" signal and retry; `nexabot-refresh-cookie.mjs` is what actually decides session health.
+    if (cookie && (res.status === 401 || res.status === 403)) {
+      console.log('     sesi ditolak (job lain masih berjalan?), tunggu 30 dtk…')
+      await sleep(30_000)
+      continue
+    }
     if (res.status !== 429) return res
     console.log('     antrean NexaBot penuh, tunggu 30 dtk…')
     await sleep(30_000)
@@ -82,9 +114,11 @@ async function nexaJob(payload, out, key) {
   // credit route is only the fallback for when the unlimited one answers 429 too often. NEXABOT_ROUTE=api
   // flips the order back if the pass is ever dropped.
   const ROUTES = (process.env.NEXABOT_ROUTE ?? 'unlimited') === 'api' ? ['/api', '/generate'] : ['/generate', '/api']
+  // The unlimited pass only responds on the web route, and only together with a session cookie.
+  const payloadWithPass = nexaCookie() ? { ...payload, use_unlimited: true, ...(TELEGRAM_ID ? { telegram_id: TELEGRAM_ID } : {}) } : payload
   const submitted = { error: '' }
   for (const path of ROUTES) {
-    const res = await nexaFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, key)
+    const res = await nexaFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloadWithPass) }, key)
     const body = await res.json().catch(() => ({}))
     if (body.ok && body.job_id) {
       submitted.jobId = body.job_id
