@@ -3,7 +3,7 @@
 # sukses — naskah 67 adegan sering bikin endpoint LLM timeout, jadi yang dibutuhkan adalah ketekunan,
 # bukan satu percobaan. Jalankan dengan nohup supaya tetap hidup walau sesi SSH putus:
 #   setsid nohup bash scripts/lf-supervisor.sh >> /tmp/lf-supervisor.log 2>&1 < /dev/null &
-cd ~/bang-story || exit 1
+cd ~/auto-video || exit 1
 LOG=/tmp/lf-supervisor.log
 DONE=/tmp/lf-supervisor.done
 : >> "$LOG"

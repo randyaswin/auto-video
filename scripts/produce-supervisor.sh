@@ -2,7 +2,7 @@
 # Supervisor produksi: menunggu kredit NexaBot cukup, lalu menjalankan antrean Shorts + long-form.
 # Loop tanpa henti: begitu kredit tersedia (Randy top up / unlimited aktif), produksi jalan lagi.
 # Karena file yang sudah ada dilewati, pekerjaan yang gagal sebelumnya dilanjutkan dari titik gagal.
-cd ~/bang-story || exit 1
+cd ~/auto-video || exit 1
 LOG=/tmp/nx-supervisor.log
 DONE=/tmp/nx-supervisor.done
 : >> "$LOG"

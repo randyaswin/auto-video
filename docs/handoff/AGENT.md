@@ -7,7 +7,7 @@ dan urutan kerja, bukan penjelasan konsep.
 
 | Hal | Nilai |
 |---|---|
-| Repo | `git@github.com:randyaswin/bang-story.git`, branch `web-mcp` |
+| Repo | `git@github.com:randyaswin/auto-video.git`, branch `web-mcp` |
 | Laptop | `randy@fedora-laptop` (Tailscale `100.115.185.3`) |
 | Server web | `http://100.115.185.3:4627` (`/api/call`, `/api/health`) |
 | Node | 22+ |
@@ -19,7 +19,7 @@ Cek kesehatan dasar sebelum bekerja:
 
 ```bash
 ssh randy@fedora-laptop 'curl -s http://100.115.185.3:4627/api/health'
-ssh randy@fedora-laptop 'cd ~/bang-story && node scripts/nexabot-refresh-cookie.mjs'
+ssh randy@fedora-laptop 'cd ~/auto-video && node scripts/nexabot-refresh-cookie.mjs'
 ```
 
 Keduanya harus sukses. Kalau refresh cookie gagal → sesi mati, perlu login OTP sekali (bagian 5).
@@ -27,7 +27,7 @@ Keduanya harus sukses. Kalau refresh cookie gagal → sesi mati, perlu login OTP
 ## 1. Menambah topik baru (wajib gerbang dulu)
 
 ```bash
-cd ~/bang-story
+cd ~/auto-video
 node scripts/topic-check.mjs "Judul Topik Baru"
 # exit 0 = lolos, exit 1 = mirip (skor >= 0,35) -> ganti topik
 ```

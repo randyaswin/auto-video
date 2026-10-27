@@ -1,20 +1,20 @@
 # PERINTAH.md — salinan-tempel untuk agent lain
 
-Semua perintah diasumsikan dijalankan **di laptop** (`randy@fedora-laptop`, repo `~/bang-story`),
+Semua perintah diasumsikan dijalankan **di laptop** (`randy@fedora-laptop`, repo `~/auto-video`),
 kecuali ditandai `[VPS]`.
 
 ## Setup dari nol
 
 ```bash
 # [VPS] clone repo
-git clone git@github.com:randyaswin/bang-story.git && cd bang-story
+git clone git@github.com:randyaswin/auto-video.git && cd auto-video
 git checkout web-mcp
 
 # [VPS] salin ke laptop
-scp -r docs/handoff randy@fedora-laptop:~/bang-story/docs/
+scp -r docs/handoff randy@fedora-laptop:~/auto-video/docs/
 
 # laptop: dependensi + build web
-cd ~/bang-story && npm ci && node scripts/build-web.mjs
+cd ~/auto-video && npm ci && node scripts/build-web.mjs
 
 # laptop: jalankan server web (systemd user)
 systemctl --user enable --now bang-story
@@ -86,7 +86,7 @@ curl -s https://nexabot.id/api/auth/me -H "Cookie: $(cat ~/.hermes/nexabot-cooki
 
 ```bash
 # jalankan di background, lepas dari sesi SSH
-cd ~/bang-story && setsid nohup bash scripts/produce-supervisor.sh >/dev/null 2>&1 < /dev/null &
+cd ~/auto-video && setsid nohup bash scripts/produce-supervisor.sh >/dev/null 2>&1 < /dev/null &
 
 # lihat log
 tail -f /tmp/nx-supervisor.log

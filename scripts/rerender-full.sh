@@ -3,7 +3,7 @@
 # mengikuti durasi target (±9 detik per adegan), jadi satu klip video NexaBot — yang selalu 10,01 detik —
 # menutup adegan utuh. Tidak ada loop, tidak ada ekor frame beku. Naskah ditulis ulang (--rebuild-script).
 # Jalankan dari folder repo: sh scripts/rerender-full.sh
-cd ~/bang-story || exit 1
+cd ~/auto-video || exit 1
 : > /tmp/nx-full.log
 cat scripts/queue.tsv scripts/queue-longform.tsv 2>/dev/null | awk 'NF >= 2 {print $1, $2, $3}' |
   xargs -P 2 -n 3 sh -c '

@@ -2,7 +2,7 @@
 # Render ulang 4 video yang gagal pada render ulang massal (naskah LLM timeout + 1 langkah gambar).
 # Kolom ke-4: `rebuild` = tulis ulang naskah (long-form), `keep` = pakai naskah yang ada (Shorts).
 # Jalankan dari folder repo: sh scripts/rerender-failed.sh
-cd ~/bang-story || exit 1
+cd ~/auto-video || exit 1
 : > /tmp/nx-retry2.log
 cat <<'EOF' | xargs -P 2 -n 4 sh -c '
   proj="$0"; name="$1"; style="$2"; mode="$3"

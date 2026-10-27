@@ -13,7 +13,7 @@ Kamu akan mengambil alih pipeline produksi video YouTube "Bang Story". Dokumen s
 di repo git, bukan di chat ini.
 
 LANGKAH 0 — baca dulu, jangan menebak
-1. git clone git@github.com:randyaswin/bang-story.git ~/bang-story && cd ~/bang-story
+1. git clone git@github.com:randyaswin/auto-video.git ~/auto-video && cd ~/auto-video
 2. git checkout web-mcp
 3. Baca berurutan: docs/handoff/README.md, docs/handoff/SPEC.md, docs/handoff/AGENT.md,
    docs/handoff/PERINTAH.md, docs/handoff/TOPIC-BANK.md
@@ -23,7 +23,7 @@ LANGKAH 0 — baca dulu, jangan menebak
 
 LANGKAH 1 — verifikasi lingkungan (laporkan apa adanya kalau gagal)
 ssh randy@fedora-laptop 'curl -s http://100.115.185.3:4627/api/health'
-ssh randy@fedora-laptop 'cd ~/bang-story && node scripts/nexabot-refresh-cookie.mjs'
+ssh randy@fedora-laptop 'cd ~/auto-video && node scripts/nexabot-refresh-cookie.mjs'
 Hasil yang benar: health {"ok":true,...} dan "Sesi hidup · unlimited AKTIF".
 Kalau refresh gagal, sesi NexaBot mati: ikuti docs/handoff/AGENT.md bagian 5 (login OTP sekali).
 Jangan pernah meminta, menampilkan, atau menulis API key/cookie di chat, log, atau commit.

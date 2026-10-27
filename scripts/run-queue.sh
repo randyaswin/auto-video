@@ -5,7 +5,7 @@
 # job kedua selama masih ada satu job berjalan ("Generate sedang berjalan … mode unlimited", HTTP 429),
 # jadi paralel justru membuat semuanya gagal. Dengan urutan begini akun terus menghasilkan selama
 # batas harian belum tercapai — stok video menumpuk walau unggahannya dijeda sesuai jadwal.
-cd ~/bang-story || exit 1
+cd ~/auto-video || exit 1
 LOG=/tmp/nx-queue.log
 : > "$LOG"
 while read -r project name style; do
@@ -14,5 +14,5 @@ while read -r project name style; do
     --project "$project" --name "$name" --style "$style" --scenes 4 --redo-voice > "/tmp/nx-$name.log" 2>&1
   echo "$name EXIT=$?" >> "$LOG"
   # Satu kegagalan tidak boleh menghentikan antrean; proyek berikutnya langsung jalan.
-done < ~/bang-story/scripts/queue.tsv
+done < ~/auto-video/scripts/queue.tsv
 echo QUEUE_DONE >> "$LOG"

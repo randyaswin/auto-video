@@ -1,7 +1,7 @@
 #!/bin/bash
 # Batch topik baru: untuk tiap baris topics-batch.tsv -> proyek -> produksi -> masuk antrean unggah.
 # Paralel 2 (batas NexaBot), retry 2x, dan berhenti total kalau 3 kali berturut-turut gagal.
-cd ~/bang-story || exit 1
+cd ~/auto-video || exit 1
 LOG=/tmp/nx-batch.log
 : > "$LOG"
 tail -n +1 scripts/topics-batch.tsv | xargs -P 2 -d '\n' -I{} bash -c '
